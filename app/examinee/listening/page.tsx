@@ -29,9 +29,27 @@ export default function ListeningSelectionPage() {
 
     setExamineeName(name)
 
-    // Load listening questions
-    const questions = JSON.parse(localStorage.getItem("listeningQuestions") || "[]")
-    setListeningQuestions(questions)
+    // Load listening questions from database
+    const loadQuestions = async () => {
+      try {
+        console.log("🔍 Loading listening questions from database...")
+        const response = await fetch("/api/listening-questions")
+        if (response.ok) {
+          const data = await response.json()
+          const questions = Array.isArray(data) ? data : data.questions || []
+          console.log("🎧 Listening questions loaded from database:", questions.length)
+          setListeningQuestions(questions)
+        } else {
+          console.error("Failed to load listening questions")
+          setListeningQuestions([])
+        }
+      } catch (error) {
+        console.error("Error loading listening questions:", error)
+        setListeningQuestions([])
+      }
+    }
+
+    loadQuestions()
   }, [router])
 
   const filteredQuestions = listeningQuestions.filter((question) => {

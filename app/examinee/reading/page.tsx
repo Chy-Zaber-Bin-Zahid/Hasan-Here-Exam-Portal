@@ -29,9 +29,27 @@ export default function ReadingSelectionPage() {
 
     setExamineeName(name)
 
-    // Load reading questions
-    const questions = JSON.parse(localStorage.getItem("readingQuestions") || "[]")
-    setReadingQuestions(questions)
+    // Load reading questions from database
+    const loadQuestions = async () => {
+      try {
+        console.log("🔍 Loading reading questions from database...")
+        const response = await fetch("/api/reading-questions")
+        if (response.ok) {
+          const data = await response.json()
+          const questions = Array.isArray(data) ? data : data.questions || []
+          console.log("📚 Reading questions loaded from database:", questions.length)
+          setReadingQuestions(questions)
+        } else {
+          console.error("Failed to load reading questions")
+          setReadingQuestions([])
+        }
+      } catch (error) {
+        console.error("Error loading reading questions:", error)
+        setReadingQuestions([])
+      }
+    }
+
+    loadQuestions()
   }, [router])
 
   const filteredQuestions = readingQuestions.filter((question) => {
