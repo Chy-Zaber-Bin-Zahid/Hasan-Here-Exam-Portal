@@ -1,34 +1,75 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { GraduationCap } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { ProtectedRoute } from "@/components/protected-route"
+import { useAuth } from "@/components/auth-provider"
+import { ExamineeModal } from "@/components/examinee-modal"
+import { TeacherModal } from "@/components/teacher-modal"
+import { GraduationCap, Users } from "lucide-react"
 
-const DashboardPage = () => {
-  const router = useRouter()
+export default function DashboardPage() {
+  const { logout } = useAuth()
+  const [showExamineeModal, setShowExamineeModal] = useState(false)
+  const [showTeacherModal, setShowTeacherModal] = useState(false)
 
   return (
-    <div className="container mx-auto p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Welcome to the Dashboard</CardTitle>
-          <CardDescription>Choose your role below.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <Button onClick={() => router.push("/student")} className="w-full h-24 text-lg">
-            Student Dashboard
-          </Button>
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-4">
+              <h1 className="text-2xl font-bold text-gray-900">Exam Portal Dashboard</h1>
+              <Button variant="outline" onClick={logout}>
+                Logout
+              </Button>
+            </div>
+          </div>
+        </header>
 
-          {/* Change the teacher dashboard link */}
-          <Button onClick={() => router.push("/teacher/access")} className="w-full h-24 text-lg">
-            <GraduationCap className="mr-2 h-6 w-6" />
-            Teacher Dashboard
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome to the Exam Portal</h2>
+            <p className="text-gray-600">Select your role to continue</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                  <Users className="w-8 h-8 text-blue-600" />
+                </div>
+                <CardTitle className="text-xl">Examinee</CardTitle>
+                <CardDescription>Take exams in Reading, Listening, and Writing modules</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" onClick={() => setShowExamineeModal(true)}>
+                  Select Examinee
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                  <GraduationCap className="w-8 h-8 text-green-600" />
+                </div>
+                <CardTitle className="text-xl">Teacher</CardTitle>
+                <CardDescription>Create and manage exam questions and monitor student progress</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" variant="outline" onClick={() => setShowTeacherModal(true)}>
+                  Select Teacher
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+
+        <ExamineeModal open={showExamineeModal} onOpenChange={setShowExamineeModal} />
+        <TeacherModal open={showTeacherModal} onOpenChange={setShowTeacherModal} />
+      </div>
+    </ProtectedRoute>
   )
 }
-
-export default DashboardPage
