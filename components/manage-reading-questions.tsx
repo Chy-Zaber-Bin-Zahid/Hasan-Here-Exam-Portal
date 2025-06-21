@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Eye } from "lucide-react"
+import { Edit, Trash2, Eye, Loader2 } from "lucide-react"
 import { EditReadingQuestionModal } from "@/components/edit-reading-question-modal"
 import { ViewReadingQuestionModal } from "@/components/view-reading-question-modal"
 import { Input } from "@/components/ui/input"
@@ -14,18 +14,40 @@ import { CalendarIcon, Search } from "lucide-react"
 export function ManageReadingQuestions() {
   const { toast } = useToast()
   const [questions, setQuestions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [editingQuestion, setEditingQuestion] = useState<any>(null)
   const [viewingQuestion, setViewingQuestion] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [dateFilter, setDateFilter] = useState("all")
 
   useEffect(() => {
-    loadQuestions()
+    loadQuestionsFromDatabase()
   }, [])
 
-  const loadQuestions = () => {
-    const saved = JSON.parse(localStorage.getItem("readingQuestions") || "[]")
-    setQuestions(saved)
+  const loadQuestionsFromDatabase = async () => {
+    try {
+      setLoading(true)
+      console.log("🔍 Loading reading questions from database...")
+
+      const response = await fetch("/api/reading-questions")
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log("📚 Reading questions loaded:", data.length)
+      setQuestions(data)
+    } catch (error) {
+      console.error("❌ Error loading reading questions:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load reading questions from database.",
+        variant: "destructive",
+      })
+      setQuestions([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   const filteredQuestions = questions.filter((question) => {
@@ -33,7 +55,7 @@ export function ManageReadingQuestions() {
 
     if (dateFilter === "all") return matchesSearch
 
-    const questionDate = new Date(question.createdAt)
+    const questionDate = new Date(question.created_at)
     const now = new Date()
 
     switch (dateFilter) {
@@ -50,15 +72,33 @@ export function ManageReadingQuestions() {
     }
   })
 
-  const deleteQuestion = (id: number) => {
-    const updatedQuestions = questions.filter((q) => q.id !== id)
-    localStorage.setItem("readingQuestions", JSON.stringify(updatedQuestions))
-    setQuestions(updatedQuestions)
+  const deleteQuestion = async (id: number) => {
+    try {
+      console.log("🗑️ Deleting reading question:", id)
 
-    toast({
-      title: "Question deleted",
-      description: "The reading question set has been deleted successfully.",
-    })
+      const response = await fetch(`/api/reading-questions/${id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      // Remove from local state
+      setQuestions(questions.filter((q) => q.id !== id))
+
+      toast({
+        title: "Question deleted",
+        description: "The reading question set has been deleted successfully.",
+      })
+    } catch (error) {
+      console.error("❌ Error deleting question:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete the question.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleEdit = (question: any) => {
@@ -69,16 +109,47 @@ export function ManageReadingQuestions() {
     setViewingQuestion(question)
   }
 
-  const handleEditSave = (updatedQuestion: any) => {
-    const updatedQuestions = questions.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q))
-    localStorage.setItem("readingQuestions", JSON.stringify(updatedQuestions))
-    setQuestions(updatedQuestions)
-    setEditingQuestion(null)
+  const handleEditSave = async (updatedQuestion: any) => {
+    try {
+      console.log("✏️ Updating reading question:", updatedQuestion.id)
 
-    toast({
-      title: "Question updated",
-      description: "The reading question set has been updated successfully.",
-    })
+      const response = await fetch(`/api/reading-questions/${updatedQuestion.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedQuestion),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      // Update local state
+      setQuestions(questions.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q)))
+      setEditingQuestion(null)
+
+      toast({
+        title: "Question updated",
+        description: "The reading question set has been updated successfully.",
+      })
+    } catch (error) {
+      console.error("❌ Error updating question:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update the question.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin mr-2" />
+        <span>Loading reading questions from database...</span>
+      </div>
+    )
   }
 
   return (
@@ -127,7 +198,7 @@ export function ManageReadingQuestions() {
         <div className="text-center py-8">
           {questions.length === 0 ? (
             <>
-              <p className="text-gray-500 mb-4">No reading questions found.</p>
+              <p className="text-gray-500 mb-4">No reading questions found in database.</p>
               <p className="text-sm text-gray-400">Create some questions first to manage them here.</p>
             </>
           ) : (
@@ -138,46 +209,51 @@ export function ManageReadingQuestions() {
           )}
         </div>
       ) : (
-        filteredQuestions.map((question) => (
-          <Card key={question.id}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-base">{question.title}</CardTitle>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => handleView(question)}>
-                  <Eye className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleEdit(question)}>
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteQuestion(question.id)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600">
-                  <strong>Questions:</strong> {question.questions.length} questions
-                </p>
-                <div className="text-sm text-gray-600">
-                  <strong>Passage Preview:</strong>
-                  <div className="bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap text-xs break-words overflow-hidden">
-                    {question.passage.substring(0, 200)}...
-                  </div>
+        filteredQuestions.map((question) => {
+          const questionsData =
+            typeof question.questions === "string" ? JSON.parse(question.questions) : question.questions
+
+          return (
+            <Card key={question.id}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-base">{question.title}</CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => handleView(question)}>
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(question)}>
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteQuestion(question.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
-                <p className="text-xs text-gray-400">Created: {new Date(question.createdAt).toLocaleDateString()}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">
+                    <strong>Questions:</strong> {Array.isArray(questionsData) ? questionsData.length : 0} questions
+                  </p>
+                  <div className="text-sm text-gray-600">
+                    <strong>Passage Preview:</strong>
+                    <div className="bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap text-xs break-words overflow-hidden">
+                      {question.passage.substring(0, 200)}...
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400">Created: {new Date(question.created_at).toLocaleDateString()}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })
       )}
 
-      {/* Modals remain the same */}
+      {/* Modals */}
       {editingQuestion && (
         <EditReadingQuestionModal
           question={editingQuestion}

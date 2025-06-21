@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Eye } from "lucide-react"
+import { Edit, Trash2, Eye, Loader2 } from "lucide-react"
 import { ViewWritingQuestionModal } from "@/components/view-writing-question-modal"
 import { EditWritingQuestionModal } from "@/components/edit-writing-question-modal"
 import { Input } from "@/components/ui/input"
@@ -14,18 +14,40 @@ import { CalendarIcon, Search } from "lucide-react"
 export function ManageWritingQuestions() {
   const { toast } = useToast()
   const [questions, setQuestions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [viewingQuestion, setViewingQuestion] = useState<any>(null)
   const [editingQuestion, setEditingQuestion] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [dateFilter, setDateFilter] = useState("all")
 
   useEffect(() => {
-    loadQuestions()
+    loadQuestionsFromDatabase()
   }, [])
 
-  const loadQuestions = () => {
-    const saved = JSON.parse(localStorage.getItem("writingQuestions") || "[]")
-    setQuestions(saved)
+  const loadQuestionsFromDatabase = async () => {
+    try {
+      setLoading(true)
+      console.log("🔍 Loading writing questions from database...")
+
+      const response = await fetch("/api/writing-questions")
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log("✍️ Writing questions loaded:", data.length)
+      setQuestions(data)
+    } catch (error) {
+      console.error("❌ Error loading writing questions:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load writing questions from database.",
+        variant: "destructive",
+      })
+      setQuestions([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   const filteredQuestions = questions.filter((question) => {
@@ -33,7 +55,7 @@ export function ManageWritingQuestions() {
 
     if (dateFilter === "all") return matchesSearch
 
-    const questionDate = new Date(question.createdAt)
+    const questionDate = new Date(question.created_at)
     const now = new Date()
 
     switch (dateFilter) {
@@ -50,15 +72,32 @@ export function ManageWritingQuestions() {
     }
   })
 
-  const deleteQuestion = (id: number) => {
-    const updatedQuestions = questions.filter((q) => q.id !== id)
-    localStorage.setItem("writingQuestions", JSON.stringify(updatedQuestions))
-    setQuestions(updatedQuestions)
+  const deleteQuestion = async (id: number) => {
+    try {
+      console.log("🗑️ Deleting writing question:", id)
 
-    toast({
-      title: "Question deleted",
-      description: "The writing question set has been deleted successfully.",
-    })
+      const response = await fetch(`/api/writing-questions/${id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      setQuestions(questions.filter((q) => q.id !== id))
+
+      toast({
+        title: "Question deleted",
+        description: "The writing question set has been deleted successfully.",
+      })
+    } catch (error) {
+      console.error("❌ Error deleting question:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete the question.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleView = (question: any) => {
@@ -67,6 +106,48 @@ export function ManageWritingQuestions() {
 
   const handleEdit = (question: any) => {
     setEditingQuestion(question)
+  }
+
+  const handleEditSave = async (updatedQuestion: any) => {
+    try {
+      console.log("✏️ Updating writing question:", updatedQuestion.id)
+
+      const response = await fetch(`/api/writing-questions/${updatedQuestion.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedQuestion),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      setQuestions(questions.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q)))
+      setEditingQuestion(null)
+
+      toast({
+        title: "Question updated",
+        description: "The writing question set has been updated successfully.",
+      })
+    } catch (error) {
+      console.error("❌ Error updating question:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update the question.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin mr-2" />
+        <span>Loading writing questions from database...</span>
+      </div>
+    )
   }
 
   return (
@@ -115,7 +196,7 @@ export function ManageWritingQuestions() {
         <div className="text-center py-8">
           {questions.length === 0 ? (
             <>
-              <p className="text-gray-500 mb-4">No writing questions found.</p>
+              <p className="text-gray-500 mb-4">No writing questions found in database.</p>
               <p className="text-sm text-gray-400">Create some questions first to manage them here.</p>
             </>
           ) : (
@@ -161,14 +242,17 @@ export function ManageWritingQuestions() {
                     {question.instructions.substring(0, 150)}...
                   </div>
                 </div>
-                <p className="text-xs text-gray-400">Created: {new Date(question.createdAt).toLocaleDateString()}</p>
+                <p className="text-sm text-gray-600">
+                  <strong>Word Limit:</strong> {question.word_limit} words
+                </p>
+                <p className="text-xs text-gray-400">Created: {new Date(question.created_at).toLocaleDateString()}</p>
               </div>
             </CardContent>
           </Card>
         ))
       )}
 
-      {/* Modals remain the same */}
+      {/* Modals */}
       {viewingQuestion && (
         <ViewWritingQuestionModal
           question={viewingQuestion}
@@ -181,16 +265,7 @@ export function ManageWritingQuestions() {
           question={editingQuestion}
           open={!!editingQuestion}
           onOpenChange={(open) => !open && setEditingQuestion(null)}
-          onSave={(updatedQuestion) => {
-            const updatedQuestions = questions.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q))
-            localStorage.setItem("writingQuestions", JSON.stringify(updatedQuestions))
-            setQuestions(updatedQuestions)
-            setEditingQuestion(null)
-            toast({
-              title: "Question updated",
-              description: "The writing question set has been updated successfully.",
-            })
-          }}
+          onSave={handleEditSave}
         />
       )}
     </div>
