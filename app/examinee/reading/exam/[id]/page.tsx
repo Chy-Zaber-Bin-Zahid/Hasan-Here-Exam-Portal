@@ -25,6 +25,7 @@ export default function ReadingExamPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [examineeName, setExamineeName] = useState("")
   const [examineeId, setExamineeId] = useState("")
+  const [loading, setLoading] = useState(true)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -40,38 +41,85 @@ export default function ReadingExamPage() {
     setExamineeName(name)
     setExamineeId(id)
 
-    // Load exam data
-    const readingQuestions = JSON.parse(localStorage.getItem("readingQuestions") || "[]")
-    const currentExam = readingQuestions.find((q: any) => q.id.toString() === examId)
+    // Load exam data from database
+    loadExamFromDatabase(examId as string)
+  }, [params.id, router])
 
-    if (!currentExam) {
+  const loadExamFromDatabase = async (examId: string) => {
+    try {
+      console.log("🔍 Loading reading exam from database, ID:", examId)
+
+      const response = await fetch("/api/reading-questions")
+      const data = await response.json()
+
+      console.log("📚 Database response:", data)
+
+      // Handle different response formats
+      let questions = []
+      if (data.success && Array.isArray(data.questions)) {
+        questions = data.questions
+      } else if (Array.isArray(data)) {
+        questions = data
+      }
+
+      const currentExam = questions.find((q: any) => q.id.toString() === examId)
+
+      if (!currentExam) {
+        toast({
+          title: "Exam not found",
+          description: "The requested exam could not be found in the database.",
+          variant: "destructive",
+        })
+        router.push("/examinee/reading")
+        return
+      }
+
+      // Parse questions if they're stored as JSON string
+      let parsedQuestions = []
+      try {
+        if (typeof currentExam.questions === "string") {
+          parsedQuestions = JSON.parse(currentExam.questions)
+        } else if (Array.isArray(currentExam.questions)) {
+          parsedQuestions = currentExam.questions
+        }
+      } catch (error) {
+        console.error("Error parsing questions:", error)
+        parsedQuestions = []
+      }
+
+      const examWithParsedQuestions = {
+        ...currentExam,
+        questions: parsedQuestions,
+      }
+
+      console.log("✅ Exam loaded:", {
+        title: examWithParsedQuestions.title,
+        questionsCount: parsedQuestions.length,
+        passage: examWithParsedQuestions.passage ? "Present" : "Missing",
+      })
+
+      setExamData(examWithParsedQuestions)
+
+      // Initialize answers object
+      const initialAnswers: { [key: number]: string } = {}
+      parsedQuestions.forEach((_: any, index: number) => {
+        initialAnswers[index] = ""
+      })
+      setAnswers(initialAnswers)
+
+      // Start timer
+      startTimer()
+      setLoading(false)
+    } catch (error) {
+      console.error("❌ Error loading exam from database:", error)
       toast({
-        title: "Exam not found",
-        description: "The requested exam could not be found.",
+        title: "Loading error",
+        description: "Failed to load exam from database. Please try again.",
         variant: "destructive",
       })
       router.push("/examinee/reading")
-      return
     }
-
-    setExamData(currentExam)
-
-    // Initialize answers object
-    const initialAnswers: { [key: number]: string } = {}
-    currentExam.questions.forEach((_: any, index: number) => {
-      initialAnswers[index] = ""
-    })
-    setAnswers(initialAnswers)
-
-    // Start timer
-    startTimer()
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-    }
-  }, [params.id, router, toast])
+  }
 
   const startTimer = () => {
     timerRef.current = setInterval(() => {
@@ -171,7 +219,8 @@ export default function ReadingExamPage() {
       yPosition += lineHeight
       doc.setFont("helvetica", "normal")
 
-      const questionLines = doc.splitTextToSize(question.text, pageWidth - 2 * margin)
+      const questionText = question.text || question.question || `Question ${index + 1}`
+      const questionLines = doc.splitTextToSize(questionText, pageWidth - 2 * margin)
       questionLines.forEach((line: string) => {
         if (yPosition > 270) {
           doc.addPage()
@@ -278,13 +327,40 @@ export default function ReadingExamPage() {
     handleSubmit()
   }
 
-  if (!examData) {
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+    }
+  }, [])
+
+  if (loading) {
     return (
       <ProtectedRoute>
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
             <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Loading Exam...</h2>
+            <p className="text-gray-600">Fetching exam data from database...</p>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
+  if (!examData) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Not Found</h2>
+            <p className="text-gray-600">The requested exam could not be loaded.</p>
+            <Button onClick={() => router.push("/examinee/reading")} className="mt-4">
+              Back to Reading Exams
+            </Button>
           </div>
         </div>
       </ProtectedRoute>
@@ -369,7 +445,9 @@ export default function ReadingExamPage() {
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto">
                 <div className="prose prose-sm max-w-none">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{examData.passage}</p>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {examData.passage || "No passage available for this exam."}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -389,7 +467,7 @@ export default function ReadingExamPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <Label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
-                            {question.text}
+                            {question.text || question.question || `Question ${index + 1}`}
                           </Label>
                           <div className="relative">
                             <Textarea
