@@ -5,29 +5,18 @@ export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json()
 
-    console.log("Login attempt:", { username, password: "***" })
+    console.log("Login attempt:", { username, passwordLength: password?.length })
 
     if (!username || !password) {
       console.log("❌ Missing username or password")
       return NextResponse.json({ error: "Username and password are required" }, { status: 400 })
     }
 
-    // Strict validation - only allow exact credentials
-    if (username !== "hasan") {
-      console.log("❌ Invalid username:", username)
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
-    }
-
-    if (password !== "hasan47") {
-      console.log("❌ Invalid password for user:", username)
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
-    }
-
-    // Get user from database to verify they exist
+    // Authenticate user
     const user = authenticateUser(username, password)
 
     if (!user) {
-      console.log("❌ User not found in database:", username)
+      console.log("❌ Authentication failed for:", username)
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 

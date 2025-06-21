@@ -63,7 +63,7 @@ export function getDatabase(): Database.Database {
 }
 
 function initializeDatabase(database: Database.Database) {
-  console.log("Initializing database...")
+  console.log("🔄 Initializing database...")
 
   // Create tables
   database.exec(`
@@ -122,27 +122,26 @@ function initializeDatabase(database: Database.Database) {
 
 function createAdminUser(database: Database.Database) {
   try {
-    // Check if admin user already exists
-    const existingUser = database.prepare("SELECT * FROM users WHERE username = ?").get("hasan")
+    // Delete existing user first to ensure clean state
+    database.prepare("DELETE FROM users WHERE username = ?").run("hasan")
+    console.log("🗑️ Cleared existing admin user")
 
-    if (!existingUser) {
-      // Store plain password for simple comparison (since we're doing strict validation in API)
-      database
-        .prepare(`
+    // Insert new admin user
+    const result = database
+      .prepare(`
         INSERT INTO users (username, password, role, full_name, email) 
         VALUES (?, ?, ?, ?, ?)
       `)
-        .run("hasan", "hasan47", "teacher", "Hasan Admin", "hasan@example.com")
+      .run("hasan", "hasan47", "teacher", "Hasan Admin", "hasan@example.com")
 
-      console.log("✅ Admin user 'hasan' created successfully!")
-      console.log("✅ Username: hasan")
-      console.log("✅ Password: hasan47")
-    } else {
-      console.log("✅ Admin user 'hasan' already exists")
-    }
+    console.log("✅ Admin user created with ID:", result.lastInsertRowid)
 
-    // Debug: Show all users
-    const allUsers = database.prepare("SELECT username, role FROM users").all()
+    // Verify user was created
+    const createdUser = database.prepare("SELECT username, password, role FROM users WHERE username = ?").get("hasan")
+    console.log("✅ Verified user in database:", createdUser)
+
+    // Show all users for debugging
+    const allUsers = database.prepare("SELECT id, username, role FROM users").all()
     console.log("📋 All users in database:", allUsers)
   } catch (error) {
     console.error("❌ Error creating admin user:", error)
@@ -151,20 +150,29 @@ function createAdminUser(database: Database.Database) {
 
 export function authenticateUser(username: string, password: string): User | null {
   try {
-    // Double check - only allow exact credentials
-    if (username !== "hasan" || password !== "hasan47") {
-      console.log("❌ Credentials don't match required values")
+    console.log("🔍 Authenticating user:", username, "with password length:", password.length)
+
+    const db = getDatabase()
+
+    // First check if user exists
+    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as User
+
+    if (!user) {
+      console.log("❌ User not found:", username)
       return null
     }
 
-    const db = getDatabase()
-    const user = db.prepare("SELECT * FROM users WHERE username = ? AND password = ?").get(username, password) as User
+    console.log("✅ User found in database:", user.username)
+    console.log("🔐 Stored password:", user.password)
+    console.log("🔐 Input password:", password)
+    console.log("🔐 Passwords match:", user.password === password)
 
-    if (user) {
-      console.log("✅ User authenticated successfully:", username)
+    // Check password
+    if (user.password === password) {
+      console.log("✅ Authentication successful for:", username)
       return user
     } else {
-      console.log("❌ User not found in database")
+      console.log("❌ Password mismatch for:", username)
       return null
     }
   } catch (error) {
@@ -264,7 +272,7 @@ export function updateListeningQuestion(
 
 export function deleteListeningQuestion(id: number): boolean {
   const db = getDatabase()
-  const result = db.prepare("DELETE FROM reading_questions WHERE id = ?").run(id)
+  const result = db.prepare("DELETE FROM listening_questions WHERE id = ?").run(id)
   return result.changes > 0
 }
 
