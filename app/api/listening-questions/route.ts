@@ -1,19 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getDatabase } from "@/lib/database"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { getAllListeningQuestions } from "@/lib/actions/listening-question.actions"
+import { getListeningQuestions, createListeningQuestion } from "@/lib/database"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const questions = await getAllListeningQuestions()
-
+    const questions = getListeningQuestions()
     return NextResponse.json({ questions })
   } catch (error) {
     console.error("Error fetching listening questions:", error)
@@ -23,55 +13,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const { title, audio_url, text, questions } = await request.json()
 
-    if (!session?.user || session.user.role !== "teacher") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!title || !audio_url || !questions) {
+      return NextResponse.json({ error: "Title, audio URL, and questions are required" }, { status: 400 })
     }
 
-    const { title, audioUrl, audioFilename, audioSize, questions } = await request.json()
+    console.log("💾 Creating listening question:", { title, audio_url })
 
-    if (!title || !audioUrl || !questions || questions.length === 0) {
-      return NextResponse.json({ error: "Title, audio, and questions are required" }, { status: 400 })
-    }
+    const newQuestion = createListeningQuestion(title, audio_url, text || "", questions)
 
-    const db = getDatabase()
-
-    const transaction = db.transaction(() => {
-      const insertQuestion = db.prepare(`
-        INSERT INTO listening_questions (title, audio_url, audio_filename, audio_size, created_by)
-        VALUES (?, ?, ?, ?, ?)
-      `)
-
-      const result = insertQuestion.run(title, audioUrl, audioFilename, audioSize, session.user.id)
-      const questionId = result.lastInsertRowid
-
-      const insertItem = db.prepare(`
-        INSERT INTO listening_question_items 
-        (listening_question_id, question_text, question_type, options, correct_answer, points, order_index)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `)
-
-      questions.forEach((item: any, index: number) => {
-        insertItem.run(
-          questionId,
-          item.text,
-          item.type || "short_answer",
-          item.options ? JSON.stringify(item.options) : null,
-          item.correctAnswer || null,
-          item.points || 1,
-          index,
-        )
-      })
-
-      return questionId
-    })
-
-    const questionId = transaction()
+    console.log("✅ Listening question created with ID:", newQuestion.id)
 
     return NextResponse.json({
       success: true,
-      id: questionId,
+      id: newQuestion.id,
       message: "Listening question created successfully",
     })
   } catch (error) {

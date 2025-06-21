@@ -26,6 +26,7 @@ export function ListeningQuestionForm() {
   const [audioUrl, setAudioUrl] = useState<string>("")
   const [isPlaying, setIsPlaying] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploadedAudioPath, setUploadedAudioPath] = useState<string>("")
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -131,44 +132,53 @@ export function ListeningQuestionForm() {
       return
     }
 
+    setIsSubmitting(true)
+
     try {
-      // Save to localStorage (keeping existing functionality)
-      const existingQuestions = JSON.parse(localStorage.getItem("listeningQuestions") || "[]")
-      const newQuestion = {
-        ...data,
-        questions: validQuestions,
-        id: Date.now(),
-        audioFileName: audioFile.name,
-        audioSize: audioFile.size,
-        audioPath: uploadedAudioPath,
-        createdAt: new Date().toISOString(),
-      }
-
-      const updatedQuestions = [...existingQuestions, newQuestion]
-      localStorage.setItem("listeningQuestions", JSON.stringify(updatedQuestions))
-
-      toast({
-        title: "Listening questions saved",
-        description: `The audio file with ${validQuestions.length} questions has been saved successfully.`,
+      // Save to database via API
+      const response = await fetch("/api/listening-questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: data.title,
+          audio_url: uploadedAudioPath,
+          text: "", // Empty for now, can be added later if needed
+          questions: JSON.stringify(validQuestions),
+        }),
       })
 
-      reset({
-        title: "",
-        questions: [{ text: "" }],
-      })
-      setAudioFile(null)
-      setAudioUrl("")
-      setUploadedAudioPath("")
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
+      const result = await response.json()
+
+      if (response.ok) {
+        toast({
+          title: "Listening questions saved",
+          description: `The audio file with ${validQuestions.length} questions has been saved to database successfully.`,
+        })
+
+        reset({
+          title: "",
+          questions: [{ text: "" }],
+        })
+        setAudioFile(null)
+        setAudioUrl("")
+        setUploadedAudioPath("")
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ""
+        }
+      } else {
+        throw new Error(result.error || "Failed to save questions")
       }
     } catch (error) {
       console.error("Save error:", error)
       toast({
         title: "Save failed",
-        description: "Failed to save listening questions. Please try again.",
+        description: "Failed to save listening questions to database. Please try again.",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -267,9 +277,9 @@ export function ListeningQuestionForm() {
           {errors.questions && <p className="text-sm text-red-500">Please add at least one question.</p>}
         </div>
 
-        <Button type="submit" className="w-full" disabled={isUploading}>
+        <Button type="submit" className="w-full" disabled={isUploading || isSubmitting}>
           <Plus className="w-4 h-4 mr-2" />
-          Save Listening Questions
+          {isSubmitting ? "Saving..." : "Save Listening Questions"}
         </Button>
       </form>
     </div>

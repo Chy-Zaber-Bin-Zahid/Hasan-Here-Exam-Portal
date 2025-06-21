@@ -6,42 +6,71 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
+import { useState } from "react"
 import { Plus } from "lucide-react"
 
 interface WritingForm {
   title: string
   prompt: string
   instructions: string
+  word_limit: number
 }
 
 export function WritingQuestionForm() {
   const { toast } = useToast()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
-  } = useForm<WritingForm>()
+  } = useForm<WritingForm>({
+    defaultValues: {
+      word_limit: 500,
+    },
+  })
 
-  const onSubmit = (data: WritingForm) => {
-    // Save to localStorage (in real app, this would be an API call)
-    const existingQuestions = JSON.parse(localStorage.getItem("writingQuestions") || "[]")
-    const newQuestion = {
-      ...data,
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
+  const onSubmit = async (data: WritingForm) => {
+    setIsSubmitting(true)
+
+    try {
+      // Save to database via API
+      const response = await fetch("/api/writing-questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: data.title,
+          prompt: data.prompt,
+          instructions: data.instructions,
+          word_limit: data.word_limit,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        toast({
+          title: "Writing questions saved",
+          description: "The writing prompt and instructions have been saved to database successfully.",
+        })
+
+        reset()
+      } else {
+        throw new Error(result.error || "Failed to save questions")
+      }
+    } catch (error) {
+      console.error("Save error:", error)
+      toast({
+        title: "Save failed",
+        description: "Failed to save writing questions to database. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
-
-    const updatedQuestions = [...existingQuestions, newQuestion]
-    localStorage.setItem("writingQuestions", JSON.stringify(updatedQuestions))
-
-    toast({
-      title: "Writing questions saved",
-      description: "The writing prompt and instructions have been saved successfully.",
-    })
-
-    reset()
   }
 
   return (
@@ -85,9 +114,27 @@ export function WritingQuestionForm() {
           {errors.instructions && <p className="text-sm text-red-500">{errors.instructions.message}</p>}
         </div>
 
-        <Button type="submit" className="w-full">
+        <div className="space-y-2">
+          <Label htmlFor="word_limit">Word Limit</Label>
+          <Input
+            id="word_limit"
+            type="number"
+            min="100"
+            max="2000"
+            placeholder="500"
+            {...register("word_limit", {
+              required: "Word limit is required",
+              min: { value: 100, message: "Minimum 100 words" },
+              max: { value: 2000, message: "Maximum 2000 words" },
+              valueAsNumber: true,
+            })}
+          />
+          {errors.word_limit && <p className="text-sm text-red-500">{errors.word_limit.message}</p>}
+        </div>
+
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
           <Plus className="w-4 h-4 mr-2" />
-          Save Writing Questions
+          {isSubmitting ? "Saving..." : "Save Writing Questions"}
         </Button>
       </form>
     </div>

@@ -1,11 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getDatabase } from "@/lib/database"
-import { getAllWritingQuestions } from "@/lib/database"
+import { getWritingQuestions, createWritingQuestion } from "@/lib/database"
 
 export async function GET() {
   try {
-    const questions = await getAllWritingQuestions()
-
+    const questions = getWritingQuestions()
     return NextResponse.json({ questions })
   } catch (error) {
     console.error("Get writing questions error:", error)
@@ -15,42 +13,21 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    // const token = request.cookies.get("auth-token")?.value
-    // const user = token ? verifyToken(token) : null
-    const user = {
-      id: 1,
-      role: "teacher",
-    }
-
-    if (!user || user.role !== "teacher") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { title, prompt, instructions, wordLimit, timeLimit } = await request.json()
+    const { title, prompt, instructions, word_limit } = await request.json()
 
     if (!title || !prompt) {
       return NextResponse.json({ error: "Title and prompt are required" }, { status: 400 })
     }
 
-    const db = getDatabase()
+    console.log("💾 Creating writing question:", { title, prompt: prompt.substring(0, 50) + "..." })
 
-    const insertQuestion = db.prepare(`
-      INSERT INTO writing_questions (title, prompt, instructions, word_limit, time_limit, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
+    const newQuestion = createWritingQuestion(title, prompt, instructions || "", word_limit || 500)
 
-    const result = insertQuestion.run(
-      title,
-      prompt,
-      instructions || null,
-      wordLimit || null,
-      timeLimit || null,
-      user.id,
-    )
+    console.log("✅ Writing question created with ID:", newQuestion.id)
 
     return NextResponse.json({
       success: true,
-      id: result.lastInsertRowid,
+      id: newQuestion.id,
       message: "Writing question created successfully",
     })
   } catch (error) {
