@@ -204,40 +204,42 @@ export default function WritingExamPage() {
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
-      // Create PDF data URL for storage simulation
+      // Create PDF data URL for storage
       const reader = new FileReader()
-      reader.onload = () => {
+      reader.onload = async () => {
         const pdfDataUrl = reader.result as string
 
-        // Save exam results
-        if (!examineeFolder.examResults) {
-          examineeFolder.examResults = {}
-        }
-
-        examineeFolder.examResults.writing_test = {
-          examId: examData?.id,
-          examTitle: examData?.title,
-          answer: answer,
-          submittedAt: new Date().toISOString(),
-          timeSpent: Math.floor((Date.now() - examStartTime) / 1000),
-          pdfData: pdfDataUrl,
-          status: "completed",
-        }
-
-        // Remove from active exams
-        if (examineeFolder.activeExams?.writing_test) {
-          delete examineeFolder.activeExams.writing_test
-        }
-
-        localStorage.setItem(currentExaminee, JSON.stringify(examineeFolder))
-
-        toast({
-          title: "Exam submitted successfully",
-          description: "Your writing exam has been submitted and saved as PDF.",
+        // Submit to API
+        const response = await fetch("/api/submit-exam", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            examType: "writing",
+            examId: examData?.id,
+            examTitle: examData?.title,
+            examineeName: examineeName,
+            examineeId: examineeId,
+            answers: { answer },
+            pdfData: pdfDataUrl,
+            timeSpent: Math.floor((Date.now() - examStartTime) / 1000),
+          }),
         })
 
-        // Navigate back to examinee dashboard
-        router.push("/examinee")
+        const result = await response.json()
+
+        if (result.success) {
+          toast({
+            title: "Exam submitted successfully",
+            description: `Your writing exam has been saved to: ${result.folderPath}`,
+          })
+
+          // Navigate back to examinee dashboard
+          router.push("/examinee")
+        } else {
+          throw new Error(result.error || "Submission failed")
+        }
       }
 
       reader.readAsDataURL(pdfBlob)

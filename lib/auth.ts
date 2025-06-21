@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken"
 import { getDatabase, type User } from "./database"
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production"
+const TEACHER_ACCESS_PASSWORD = "hasan47"
 
 export interface AuthUser {
   id: number
@@ -42,7 +43,7 @@ export function verifyToken(token: string): AuthUser | null {
   }
 }
 
-export function authenticateUser(username: string, password: string): Promise<AuthUser | null> {
+export async function authenticateUser(username: string, password: string): Promise<AuthUser | null> {
   return new Promise((resolve) => {
     const db = getDatabase()
 
@@ -72,4 +73,8 @@ export function authenticateUser(username: string, password: string): Promise<Au
       resolve(null)
     }
   })
+}
+
+export function verifyTeacherAccess(password: string): boolean {
+  return password === TEACHER_ACCESS_PASSWORD
 }

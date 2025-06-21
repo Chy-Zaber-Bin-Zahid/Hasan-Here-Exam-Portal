@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { authenticateUser } from "@/lib/database"
+import { authenticateUser, generateToken } from "@/lib/auth"
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,28 +9,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Username and password are required" }, { status: 400 })
     }
 
-    const user = authenticateUser(username, password)
+    const user = await authenticateUser(username, password)
 
     if (!user) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
-    // Create simple session data (no JWT needed)
-    const sessionData = {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      full_name: user.full_name,
-      email: user.email,
-    }
+    const token = generateToken(user)
 
     const response = NextResponse.json({
       success: true,
-      user: sessionData,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        full_name: user.full_name,
+        email: user.email,
+      },
     })
 
-    // Set simple session cookie
-    response.cookies.set("user-session", JSON.stringify(sessionData), {
+    // Set HTTP-only cookie
+    response.cookies.set("auth-token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",

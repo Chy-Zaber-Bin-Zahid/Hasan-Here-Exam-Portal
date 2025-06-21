@@ -219,42 +219,42 @@ export default function ReadingExamPage() {
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
-      // Create PDF data URL for storage simulation
+      // Create PDF data URL for storage
       const reader = new FileReader()
-      reader.onload = () => {
+      reader.onload = async () => {
         const pdfDataUrl = reader.result as string
 
-        // Update folder structure with exam results
-        const folderData = JSON.parse(localStorage.getItem("examineeFolder") || "{}")
-        const currentTime = new Date().toISOString()
-
-        // Store exam results
-        folderData.examResults = folderData.examResults || {}
-        folderData.examResults.reading_test = {
-          examId: examData.id,
-          examTitle: examData.title,
-          answers: answers,
-          submittedAt: currentTime,
-          timeSpent: 3600 - timeLeft,
-          pdfData: pdfDataUrl,
-          status: "completed",
-        }
-
-        // Update active exam status
-        if (folderData.activeExams?.reading_test) {
-          folderData.activeExams.reading_test.status = "completed"
-          folderData.activeExams.reading_test.completedAt = currentTime
-        }
-
-        localStorage.setItem("examineeFolder", JSON.stringify(folderData))
-
-        toast({
-          title: "Exam submitted successfully",
-          description: "Your reading exam has been submitted and saved as PDF.",
+        // Submit to API
+        const response = await fetch("/api/submit-exam", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            examType: "reading",
+            examId: examData?.id,
+            examTitle: examData?.title,
+            examineeName: examineeName,
+            examineeId: examineeId,
+            answers: answers,
+            pdfData: pdfDataUrl,
+            timeSpent: 3600 - timeLeft,
+          }),
         })
 
-        // Navigate back to examinee dashboard
-        router.push("/examinee")
+        const result = await response.json()
+
+        if (result.success) {
+          toast({
+            title: "Exam submitted successfully",
+            description: `Your reading exam has been saved to: ${result.folderPath}`,
+          })
+
+          // Navigate back to examinee dashboard
+          router.push("/examinee")
+        } else {
+          throw new Error(result.error || "Submission failed")
+        }
       }
 
       reader.readAsDataURL(pdfBlob)
