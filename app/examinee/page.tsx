@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
-import { ArrowLeft, PenTool, Headphones, BookOpen, User, Clock, AlertTriangle, Info } from "lucide-react"
+import { ArrowLeft, PenTool, Headphones, BookOpen, User, Clock, AlertTriangle, Info, Volume2 } from "lucide-react"
 
 export default function ExamineePage() {
   const { logout } = useAuth()
@@ -81,7 +81,7 @@ export default function ExamineePage() {
               </AlertDescription>
             </Alert>
 
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="border-orange-200 bg-orange-50">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-2">
@@ -120,6 +120,20 @@ export default function ExamineePage() {
                 <CardContent>
                   <p className="text-sm text-blue-700">
                     Your answers will be automatically saved and submitted when the time limit is reached.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-purple-200 bg-purple-50">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Volume2 className="w-5 h-5 text-purple-600" />
+                    <CardTitle className="text-base text-purple-800">Listening Audio</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-purple-700">
+                    Audio in listening exams will play only once with no pause or replay option.
                   </p>
                 </CardContent>
               </Card>
