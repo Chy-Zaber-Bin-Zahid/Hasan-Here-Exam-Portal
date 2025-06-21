@@ -8,17 +8,30 @@ export async function POST(request: NextRequest) {
     console.log("Login attempt:", { username, password: "***" })
 
     if (!username || !password) {
+      console.log("❌ Missing username or password")
       return NextResponse.json({ error: "Username and password are required" }, { status: 400 })
     }
 
-    const user = authenticateUser(username, password)
-
-    if (!user) {
-      console.log("Authentication failed for user:", username)
+    // Strict validation - only allow exact credentials
+    if (username !== "hasan") {
+      console.log("❌ Invalid username:", username)
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
-    console.log("Authentication successful for user:", username)
+    if (password !== "hasan47") {
+      console.log("❌ Invalid password for user:", username)
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    }
+
+    // Get user from database to verify they exist
+    const user = authenticateUser(username, password)
+
+    if (!user) {
+      console.log("❌ User not found in database:", username)
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    }
+
+    console.log("✅ Authentication successful for user:", username)
 
     // Create session data
     const sessionData = {
@@ -44,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
-    console.error("Login error:", error)
+    console.error("❌ Login error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
