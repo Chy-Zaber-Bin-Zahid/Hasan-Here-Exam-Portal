@@ -65,7 +65,7 @@ export function getDatabase(): Database.Database {
 function initializeDatabase(database: Database.Database) {
   console.log("🔄 Initializing database...")
 
-  // Create tables
+  // Create tables with correct column names
   database.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,9 +163,6 @@ export function authenticateUser(username: string, password: string): User | nul
     }
 
     console.log("✅ User found in database:", user.username)
-    console.log("🔐 Stored password:", user.password)
-    console.log("🔐 Input password:", password)
-    console.log("🔐 Passwords match:", user.password === password)
 
     // Check password
     if (user.password === password) {
@@ -329,7 +326,7 @@ export function deleteWritingQuestion(id: number): boolean {
   return result.changes > 0
 }
 
-// Exam Submissions
+// Exam Submissions - Fixed to match database schema
 export function createExamSubmission(
   examineeName: string,
   examineeId: string,
@@ -340,6 +337,16 @@ export function createExamSubmission(
   pdfPath: string,
 ): ExamSubmission {
   const db = getDatabase()
+
+  console.log("💾 Creating exam submission:", {
+    examineeName,
+    examineeId,
+    examType,
+    examId,
+    examTitle,
+    pdfPath,
+  })
+
   const result = db
     .prepare(`
     INSERT INTO exam_submissions (examinee_name, examinee_id, exam_type, exam_id, exam_title, answers, pdf_path) 
@@ -347,7 +354,13 @@ export function createExamSubmission(
   `)
     .run(examineeName, examineeId, examType, examId, examTitle, answers, pdfPath)
 
-  return db.prepare("SELECT * FROM exam_submissions WHERE id = ?").get(result.lastInsertRowid) as ExamSubmission
+  const submission = db
+    .prepare("SELECT * FROM exam_submissions WHERE id = ?")
+    .get(result.lastInsertRowid) as ExamSubmission
+
+  console.log("✅ Exam submission created with ID:", submission.id)
+
+  return submission
 }
 
 export function getExamSubmissions(): ExamSubmission[] {
