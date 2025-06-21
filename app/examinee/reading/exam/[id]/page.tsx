@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
-import { Clock, BookOpen, AlertTriangle, CheckCircle } from "lucide-react"
+import { Clock, BookOpen, AlertTriangle, CheckCircle, User } from "lucide-react"
 
 export default function ReadingExamPage() {
   const { logout } = useAuth()
@@ -89,6 +90,13 @@ export default function ReadingExamPage() {
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+  }
+
+  const countWords = (text: string) => {
+    return text
+      .trim()
+      .split(/\s+/)
+      .filter((word) => word.length > 0).length
   }
 
   const handleAnswerChange = (questionIndex: number, value: string) => {
@@ -285,48 +293,61 @@ export default function ReadingExamPage() {
 
   const answeredQuestions = Object.values(answers).filter((answer) => answer.trim() !== "").length
   const totalQuestions = examData.questions.length
+  const progressPercentage = ((3600 - timeLeft) / 3600) * 100
+  const isTimeWarning = timeLeft < 600
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-          <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-6 h-6 text-green-600" />
-                  <h1 className="text-xl font-bold text-gray-900">{examData.title}</h1>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <BookOpen className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold text-gray-900">Reading Exam</h1>
+                    <p className="text-sm text-gray-600">{examData.title}</p>
+                  </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Progress:</span>
-                  <span className="text-sm font-medium">
+                  <User className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm text-gray-600">{examineeName}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>
                     {answeredQuestions}/{totalQuestions} answered
                   </span>
                 </div>
-
                 <div
                   className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                    timeLeft < 600 ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+                    isTimeWarning ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
                   }`}
                 >
                   <Clock className="w-4 h-4" />
-                  <span className="font-mono font-medium">{formatTime(timeLeft)}</span>
+                  <span className="font-mono text-sm">{formatTime(timeLeft)}</span>
                 </div>
-
                 <Button variant="outline" onClick={logout}>
                   Logout
                 </Button>
               </div>
             </div>
+
+            <div className="pb-4">
+              <Progress value={progressPercentage} className="h-2" />
+            </div>
           </div>
         </header>
 
         {/* Time Warning */}
-        {timeLeft < 600 && timeLeft > 0 && (
+        {isTimeWarning && (
           <Alert className="mx-4 mt-4 border-red-200 bg-red-50">
             <AlertTriangle className="h-4 w-4 text-red-600" />
             <AlertDescription className="text-red-700">
@@ -336,17 +357,17 @@ export default function ReadingExamPage() {
         )}
 
         {/* Main Content */}
-        <main className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-200px)]">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
             {/* Left Panel - Reading Passage */}
-            <Card className="h-full">
+            <Card className="flex flex-col">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-green-600" />
                   Reading Passage
                 </CardTitle>
               </CardHeader>
-              <CardContent className="h-full overflow-y-auto">
+              <CardContent className="flex-1 overflow-y-auto">
                 <div className="prose prose-sm max-w-none">
                   <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{examData.passage}</p>
                 </div>
@@ -354,30 +375,37 @@ export default function ReadingExamPage() {
             </Card>
 
             {/* Right Panel - Questions */}
-            <Card className="h-full">
+            <Card className="flex flex-col">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg">Questions ({totalQuestions})</CardTitle>
               </CardHeader>
-              <CardContent className="h-full overflow-y-auto">
+              <CardContent className="flex-1 overflow-y-auto">
                 <div className="space-y-6">
                   {examData.questions.map((question: any, index: number) => (
                     <div key={index} className="space-y-3">
-                      <div className="flex items-start gap-2">
-                        <span className="text-sm font-medium text-gray-500 mt-1 min-w-[60px]">Q{index + 1}.</span>
-                        <div className="flex-1">
-                          <Label htmlFor={`question-${index}`} className="text-sm font-medium">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-6 h-6 bg-green-100 rounded-full flex items-center justify-center text-sm font-medium text-green-600">
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <Label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
                             {question.text}
                           </Label>
+                          <div className="relative">
+                            <Textarea
+                              id={`question-${index}`}
+                              placeholder="Enter your answer here..."
+                              value={answers[index] || ""}
+                              onChange={(e) => handleAnswerChange(index, e.target.value)}
+                              className="min-h-[100px] resize-none"
+                            />
+                            <div className="flex items-center justify-between mt-2">
+                              <span className="text-xs text-gray-500">{countWords(answers[index] || "")} words</span>
+                              {answers[index]?.trim() && <CheckCircle className="w-4 h-4 text-green-500" />}
+                            </div>
+                          </div>
                         </div>
-                        {answers[index]?.trim() && <CheckCircle className="w-4 h-4 text-green-500 mt-1" />}
                       </div>
-                      <Textarea
-                        id={`question-${index}`}
-                        placeholder="Enter your answer here..."
-                        value={answers[index] || ""}
-                        onChange={(e) => handleAnswerChange(index, e.target.value)}
-                        className="min-h-[100px] ml-[68px]"
-                      />
                     </div>
                   ))}
                 </div>
@@ -385,9 +413,9 @@ export default function ReadingExamPage() {
             </Card>
           </div>
 
-          {/* Submit Button */}
+          {/* Submit Button - Bottom Center */}
           <div className="mt-6 flex justify-center">
-            <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="px-8">
+            <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="px-12">
               {isSubmitting ? "Submitting..." : "Submit Exam"}
             </Button>
           </div>
