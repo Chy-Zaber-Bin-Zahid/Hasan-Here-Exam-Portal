@@ -123,25 +123,31 @@ function initializeDatabase(database: Database.Database) {
 
 function createAdminUser(database: Database.Database) {
   try {
-    // Check if admin user already exists
-    const existingUser = database.prepare("SELECT * FROM users WHERE username = ?").get("hasan")
+    // First, let's delete any existing user to start fresh
+    database.prepare("DELETE FROM users WHERE username = ?").run("hasan")
+    console.log("🗑️ Cleared existing admin user")
 
-    if (!existingUser) {
-      // Hash the password: hasan47
-      const hashedPassword = bcrypt.hashSync("hasan47", 10)
+    // Hash the password: hasan47
+    const hashedPassword = bcrypt.hashSync("hasan47", 10)
+    console.log("🔐 Generated hash for password 'hasan47'")
 
-      // Insert admin user
-      database
-        .prepare(`
-        INSERT INTO users (username, password, role, full_name, email) 
-        VALUES (?, ?, ?, ?, ?)
-      `)
-        .run("hasan", hashedPassword, "teacher", "Hasan Admin", "hasan@example.com")
+    // Insert admin user
+    database
+      .prepare(`
+      INSERT INTO users (username, password, role, full_name, email) 
+      VALUES (?, ?, ?, ?, ?)
+    `)
+      .run("hasan", hashedPassword, "teacher", "Hasan Admin", "hasan@example.com")
 
-      console.log("✅ Admin user 'hasan' created successfully!")
-      console.log("✅ Password: hasan47")
-    } else {
-      console.log("✅ Admin user 'hasan' already exists")
+    console.log("✅ Admin user 'hasan' created successfully!")
+    console.log("✅ Username: hasan")
+    console.log("✅ Password: hasan47")
+
+    // Test the password immediately after creation
+    const testUser = database.prepare("SELECT * FROM users WHERE username = ?").get("hasan") as User
+    if (testUser) {
+      const testResult = bcrypt.compareSync("hasan47", testUser.password)
+      console.log("🧪 Password test after creation:", testResult ? "✅ PASS" : "❌ FAIL")
     }
 
     // Debug: Show all users
@@ -157,22 +163,32 @@ export function authenticateUser(username: string, password: string): User | nul
     const db = getDatabase()
     const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as User
 
-    console.log("User lookup result:", user ? "Found" : "Not found")
+    console.log("🔍 User lookup result:", user ? "Found" : "Not found")
 
     if (!user) {
       console.log("❌ User not found:", username)
       return null
     }
 
+    console.log("🔐 Attempting password verification...")
+    console.log("🔐 Input password:", password)
+    console.log("🔐 Stored hash length:", user.password.length)
+
     // Verify password
     const isValid = bcrypt.compareSync(password, user.password)
-    console.log("Password verification:", isValid ? "✅ Valid" : "❌ Invalid")
+    console.log("🔐 Password verification result:", isValid ? "✅ VALID" : "❌ INVALID")
 
     if (isValid) {
       console.log("✅ Authentication successful for:", username)
       return user
     } else {
       console.log("❌ Invalid password for:", username)
+
+      // Additional debug: try creating a new hash and comparing
+      const newHash = bcrypt.hashSync(password, 10)
+      const newTest = bcrypt.compareSync(password, newHash)
+      console.log("🧪 Fresh hash test:", newTest ? "✅ PASS" : "❌ FAIL")
+
       return null
     }
   } catch (error) {
