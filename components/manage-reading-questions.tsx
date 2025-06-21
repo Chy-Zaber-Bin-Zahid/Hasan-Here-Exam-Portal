@@ -21,6 +21,13 @@ export function ManageReadingQuestions() {
   const [dateFilter, setDateFilter] = useState("all")
 
   useEffect(() => {
+    // Ensure questions is always an array
+    if (!Array.isArray(questions)) {
+      setQuestions([])
+    }
+  }, [questions])
+
+  useEffect(() => {
     loadQuestionsFromDatabase()
   }, [])
 
@@ -35,8 +42,9 @@ export function ManageReadingQuestions() {
       }
 
       const data = await response.json()
-      console.log("📚 Reading questions loaded:", data.length)
-      setQuestions(data)
+      const questionsArray = data.questions || data || []
+      console.log("📚 Reading questions loaded:", questionsArray.length)
+      setQuestions(questionsArray)
     } catch (error) {
       console.error("❌ Error loading reading questions:", error)
       toast({
