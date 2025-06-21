@@ -64,6 +64,8 @@ export function getDatabase(): Database.Database {
 }
 
 function initializeDatabase(database: Database.Database) {
+  console.log("Initializing database...")
+
   // Create tables
   database.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -115,18 +117,18 @@ function initializeDatabase(database: Database.Database) {
     );
   `)
 
-  // Create admin user if not exists
+  // Create admin user
   createAdminUser(database)
 }
 
-async function createAdminUser(database: Database.Database) {
+function createAdminUser(database: Database.Database) {
   try {
     // Check if admin user already exists
     const existingUser = database.prepare("SELECT * FROM users WHERE username = ?").get("hasan")
 
     if (!existingUser) {
       // Hash the password: hasan47
-      const hashedPassword = await bcrypt.hash("hasan47", 10)
+      const hashedPassword = bcrypt.hashSync("hasan47", 10)
 
       // Insert admin user
       database
@@ -137,9 +139,14 @@ async function createAdminUser(database: Database.Database) {
         .run("hasan", hashedPassword, "teacher", "Hasan Admin", "hasan@example.com")
 
       console.log("✅ Admin user 'hasan' created successfully!")
+      console.log("✅ Password: hasan47")
     } else {
       console.log("✅ Admin user 'hasan' already exists")
     }
+
+    // Debug: Show all users
+    const allUsers = database.prepare("SELECT username, role FROM users").all()
+    console.log("📋 All users in database:", allUsers)
   } catch (error) {
     console.error("❌ Error creating admin user:", error)
   }
@@ -150,20 +157,26 @@ export function authenticateUser(username: string, password: string): User | nul
     const db = getDatabase()
     const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as User
 
+    console.log("User lookup result:", user ? "Found" : "Not found")
+
     if (!user) {
+      console.log("❌ User not found:", username)
       return null
     }
 
     // Verify password
     const isValid = bcrypt.compareSync(password, user.password)
+    console.log("Password verification:", isValid ? "✅ Valid" : "❌ Invalid")
 
     if (isValid) {
+      console.log("✅ Authentication successful for:", username)
       return user
     } else {
+      console.log("❌ Invalid password for:", username)
       return null
     }
   } catch (error) {
-    console.error("Authentication error:", error)
+    console.error("❌ Authentication error:", error)
     return null
   }
 }
