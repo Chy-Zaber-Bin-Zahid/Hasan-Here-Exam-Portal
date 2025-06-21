@@ -1,6 +1,6 @@
 import Database from "better-sqlite3"
-import { readFileSync } from "fs"
-import { join } from "path"
+import bcrypt from "bcryptjs"
+import path from "path"
 
 export interface User {
   id: number
@@ -16,33 +16,17 @@ export interface ReadingQuestion {
   id: number
   title: string
   passage: string
-  created_by: number
+  questions: string
   created_at: string
-  questions?: ReadingQuestionItem[]
-}
-
-export interface ReadingQuestionItem {
-  id: number
-  reading_question_id: number
-  question_text: string
-  question_order: number
 }
 
 export interface ListeningQuestion {
   id: number
   title: string
-  audio_filename: string
-  audio_size: number
-  created_by: number
+  audio_url: string
+  text: string
+  questions: string
   created_at: string
-  questions?: ListeningQuestionItem[]
-}
-
-export interface ListeningQuestionItem {
-  id: number
-  listening_question_id: number
-  question_text: string
-  question_order: number
 }
 
 export interface WritingQuestion {
@@ -50,197 +34,310 @@ export interface WritingQuestion {
   title: string
   prompt: string
   instructions: string
-  created_by: number
+  word_limit: number
   created_at: string
 }
 
-export interface ExamSession {
+export interface ExamSubmission {
   id: number
-  user_id: number
+  examinee_name: string
+  examinee_id: string
   exam_type: "reading" | "listening" | "writing"
   exam_id: number
-  started_at: string
-  completed_at?: string
-  time_limit?: number
-  status: "in_progress" | "completed" | "abandoned"
-}
-
-export interface ExamAnswer {
-  id: number
-  session_id: number
-  question_id?: number
-  answer_text: string
-  created_at: string
-  updated_at: string
+  exam_title: string
+  answers: string
+  pdf_path: string
+  submitted_at: string
 }
 
 let db: Database.Database | null = null
 
 export function getDatabase(): Database.Database {
   if (!db) {
-    // Create database file in the project root
-    db = new Database("exam_portal.db")
+    const dbPath = path.join(process.cwd(), "exam_portal.db")
+    db = new Database(dbPath)
 
-    // Enable foreign keys
-    db.pragma("foreign_keys = ON")
-
-    // Initialize database schema
-    initializeDatabase()
+    // Initialize database with tables
+    initializeDatabase(db)
   }
-
   return db
 }
 
-function initializeDatabase() {
-  if (!db) return
+function initializeDatabase(database: Database.Database) {
+  // Create tables
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('teacher', 'examinee')),
+      full_name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 
+    CREATE TABLE IF NOT EXISTS reading_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      passage TEXT NOT NULL,
+      questions TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS listening_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      audio_url TEXT NOT NULL,
+      text TEXT NOT NULL,
+      questions TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS writing_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      instructions TEXT NOT NULL,
+      word_limit INTEGER DEFAULT 500,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS exam_submissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      examinee_name TEXT NOT NULL,
+      examinee_id TEXT NOT NULL,
+      exam_type TEXT NOT NULL CHECK (exam_type IN ('reading', 'listening', 'writing')),
+      exam_id INTEGER NOT NULL,
+      exam_title TEXT NOT NULL,
+      answers TEXT NOT NULL,
+      pdf_path TEXT NOT NULL,
+      submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
+
+  // Create admin user if not exists
+  createAdminUser(database)
+}
+
+async function createAdminUser(database: Database.Database) {
   try {
-    // Read and execute the SQL initialization script
-    const sqlScript = readFileSync(join(process.cwd(), "scripts", "init-database.sql"), "utf-8")
+    // Check if admin user already exists
+    const existingUser = database.prepare("SELECT * FROM users WHERE username = ?").get("hasan")
 
-    // Split by semicolon and execute each statement
-    const statements = sqlScript
-      .split(";")
-      .map((stmt) => stmt.trim())
-      .filter((stmt) => stmt.length > 0)
+    if (!existingUser) {
+      // Hash the password: hasan47
+      const hashedPassword = await bcrypt.hash("hasan47", 10)
 
-    for (const statement of statements) {
-      db.exec(statement)
+      // Insert admin user
+      database
+        .prepare(`
+        INSERT INTO users (username, password, role, full_name, email) 
+        VALUES (?, ?, ?, ?, ?)
+      `)
+        .run("hasan", hashedPassword, "teacher", "Hasan Admin", "hasan@example.com")
+
+      console.log("✅ Admin user 'hasan' created successfully!")
+    } else {
+      console.log("✅ Admin user 'hasan' already exists")
     }
-
-    console.log("Database initialized successfully")
   } catch (error) {
-    console.error("Error initializing database:", error)
+    console.error("❌ Error creating admin user:", error)
   }
 }
 
-// User operations
 export function authenticateUser(username: string, password: string): User | null {
-  const db = getDatabase()
   try {
-    const user = db.prepare("SELECT * FROM users WHERE username = ? AND password = ?").get(username, password) as User
-    return user || null
+    const db = getDatabase()
+    const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as User
+
+    if (!user) {
+      return null
+    }
+
+    // Verify password
+    const isValid = bcrypt.compareSync(password, user.password)
+
+    if (isValid) {
+      return user
+    } else {
+      return null
+    }
   } catch (error) {
     console.error("Authentication error:", error)
     return null
   }
 }
 
-export function getUserById(id: number): User | null {
+// Reading Questions
+export function getReadingQuestions(): ReadingQuestion[] {
   const db = getDatabase()
-  try {
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User
-    return user || null
-  } catch (error) {
-    console.error("Get user error:", error)
-    return null
-  }
+  return db.prepare("SELECT * FROM reading_questions ORDER BY created_at DESC").all() as ReadingQuestion[]
 }
 
-// Reading questions operations
-export function getAllReadingQuestions(): ReadingQuestion[] {
+export function getReadingQuestion(id: number): ReadingQuestion | null {
   const db = getDatabase()
-  try {
-    const questions = db.prepare("SELECT * FROM reading_questions ORDER BY created_at DESC").all() as ReadingQuestion[]
-
-    // Get questions for each reading question
-    for (const question of questions) {
-      question.questions = db
-        .prepare("SELECT * FROM reading_question_items WHERE reading_question_id = ? ORDER BY question_order")
-        .all(question.id) as ReadingQuestionItem[]
-    }
-
-    return questions
-  } catch (error) {
-    console.error("Get reading questions error:", error)
-    return []
-  }
+  return db.prepare("SELECT * FROM reading_questions WHERE id = ?").get(id) as ReadingQuestion | null
 }
 
-export function getReadingQuestionById(id: number): ReadingQuestion | null {
+export function createReadingQuestion(title: string, passage: string, questions: string): ReadingQuestion {
   const db = getDatabase()
-  try {
-    const question = db.prepare("SELECT * FROM reading_questions WHERE id = ?").get(id) as ReadingQuestion
+  const result = db
+    .prepare(`
+    INSERT INTO reading_questions (title, passage, questions) 
+    VALUES (?, ?, ?)
+  `)
+    .run(title, passage, questions)
 
-    if (question) {
-      question.questions = db
-        .prepare("SELECT * FROM reading_question_items WHERE reading_question_id = ? ORDER BY question_order")
-        .all(question.id) as ReadingQuestionItem[]
-    }
-
-    return question || null
-  } catch (error) {
-    console.error("Get reading question error:", error)
-    return null
-  }
+  return getReadingQuestion(result.lastInsertRowid as number)!
 }
 
-// Listening questions operations
-export function getAllListeningQuestions(): ListeningQuestion[] {
+export function updateReadingQuestion(id: number, title: string, passage: string, questions: string): boolean {
   const db = getDatabase()
-  try {
-    const questions = db
-      .prepare("SELECT * FROM listening_questions ORDER BY created_at DESC")
-      .all() as ListeningQuestion[]
+  const result = db
+    .prepare(`
+    UPDATE reading_questions 
+    SET title = ?, passage = ?, questions = ? 
+    WHERE id = ?
+  `)
+    .run(title, passage, questions, id)
 
-    // Get questions for each listening question
-    for (const question of questions) {
-      question.questions = db
-        .prepare("SELECT * FROM listening_question_items WHERE listening_question_id = ? ORDER BY question_order")
-        .all(question.id) as ListeningQuestionItem[]
-    }
-
-    return questions
-  } catch (error) {
-    console.error("Get listening questions error:", error)
-    return []
-  }
+  return result.changes > 0
 }
 
-export function getListeningQuestionById(id: number): ListeningQuestion | null {
+export function deleteReadingQuestion(id: number): boolean {
   const db = getDatabase()
-  try {
-    const question = db.prepare("SELECT * FROM listening_questions WHERE id = ?").get(id) as ListeningQuestion
-
-    if (question) {
-      question.questions = db
-        .prepare("SELECT * FROM listening_question_items WHERE listening_question_id = ? ORDER BY question_order")
-        .all(question.id) as ListeningQuestionItem[]
-    }
-
-    return question || null
-  } catch (error) {
-    console.error("Get listening question error:", error)
-    return null
-  }
+  const result = db.prepare("DELETE FROM reading_questions WHERE id = ?").run(id)
+  return result.changes > 0
 }
 
-// Writing questions operations
-export function getAllWritingQuestions(): WritingQuestion[] {
+// Listening Questions
+export function getListeningQuestions(): ListeningQuestion[] {
   const db = getDatabase()
-  try {
-    return db.prepare("SELECT * FROM writing_questions ORDER BY created_at DESC").all() as WritingQuestion[]
-  } catch (error) {
-    console.error("Get writing questions error:", error)
-    return []
-  }
+  return db.prepare("SELECT * FROM listening_questions ORDER BY created_at DESC").all() as ListeningQuestion[]
 }
 
-export function getWritingQuestionById(id: number): WritingQuestion | null {
+export function getListeningQuestion(id: number): ListeningQuestion | null {
   const db = getDatabase()
-  try {
-    const question = db.prepare("SELECT * FROM writing_questions WHERE id = ?").get(id) as WritingQuestion
-    return question || null
-  } catch (error) {
-    console.error("Get writing question error:", error)
-    return null
-  }
+  return db.prepare("SELECT * FROM listening_questions WHERE id = ?").get(id) as ListeningQuestion | null
 }
 
-// Close database connection
-export function closeDatabase() {
-  if (db) {
-    db.close()
-    db = null
-  }
+export function createListeningQuestion(
+  title: string,
+  audio_url: string,
+  text: string,
+  questions: string,
+): ListeningQuestion {
+  const db = getDatabase()
+  const result = db
+    .prepare(`
+    INSERT INTO listening_questions (title, audio_url, text, questions) 
+    VALUES (?, ?, ?, ?)
+  `)
+    .run(title, audio_url, text, questions)
+
+  return getListeningQuestion(result.lastInsertRowid as number)!
+}
+
+export function updateListeningQuestion(
+  id: number,
+  title: string,
+  audio_url: string,
+  text: string,
+  questions: string,
+): boolean {
+  const db = getDatabase()
+  const result = db
+    .prepare(`
+    UPDATE listening_questions 
+    SET title = ?, audio_url = ?, text = ?, questions = ? 
+    WHERE id = ?
+  `)
+    .run(title, audio_url, text, questions, id)
+
+  return result.changes > 0
+}
+
+export function deleteListeningQuestion(id: number): boolean {
+  const db = getDatabase()
+  const result = db.prepare("DELETE FROM listening_questions WHERE id = ?").run(id)
+  return result.changes > 0
+}
+
+// Writing Questions
+export function getWritingQuestions(): WritingQuestion[] {
+  const db = getDatabase()
+  return db.prepare("SELECT * FROM writing_questions ORDER BY created_at DESC").all() as WritingQuestion[]
+}
+
+export function getWritingQuestion(id: number): WritingQuestion | null {
+  const db = getDatabase()
+  return db.prepare("SELECT * FROM writing_questions WHERE id = ?").get(id) as WritingQuestion | null
+}
+
+export function createWritingQuestion(
+  title: string,
+  prompt: string,
+  instructions: string,
+  word_limit: number,
+): WritingQuestion {
+  const db = getDatabase()
+  const result = db
+    .prepare(`
+    INSERT INTO writing_questions (title, prompt, instructions, word_limit) 
+    VALUES (?, ?, ?, ?)
+  `)
+    .run(title, prompt, instructions, word_limit)
+
+  return getWritingQuestion(result.lastInsertRowid as number)!
+}
+
+export function updateWritingQuestion(
+  id: number,
+  title: string,
+  prompt: string,
+  instructions: string,
+  word_limit: number,
+): boolean {
+  const db = getDatabase()
+  const result = db
+    .prepare(`
+    UPDATE writing_questions 
+    SET title = ?, prompt = ?, instructions = ?, word_limit = ? 
+    WHERE id = ?
+  `)
+    .run(title, prompt, instructions, word_limit, id)
+
+  return result.changes > 0
+}
+
+export function deleteWritingQuestion(id: number): boolean {
+  const db = getDatabase()
+  const result = db.prepare("DELETE FROM writing_questions WHERE id = ?").run(id)
+  return result.changes > 0
+}
+
+// Exam Submissions
+export function createExamSubmission(
+  examineeName: string,
+  examineeId: string,
+  examType: "reading" | "listening" | "writing",
+  examId: number,
+  examTitle: string,
+  answers: string,
+  pdfPath: string,
+): ExamSubmission {
+  const db = getDatabase()
+  const result = db
+    .prepare(`
+    INSERT INTO exam_submissions (examinee_name, examinee_id, exam_type, exam_id, exam_title, answers, pdf_path) 
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+    .run(examineeName, examineeId, examType, examId, examTitle, answers, pdfPath)
+
+  return db.prepare("SELECT * FROM exam_submissions WHERE id = ?").get(result.lastInsertRowid) as ExamSubmission
+}
+
+export function getExamSubmissions(): ExamSubmission[] {
+  const db = getDatabase()
+  return db.prepare("SELECT * FROM exam_submissions ORDER BY submitted_at DESC").all() as ExamSubmission[]
 }
