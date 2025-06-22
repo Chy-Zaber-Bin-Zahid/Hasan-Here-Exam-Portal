@@ -21,7 +21,7 @@ interface ReadingForm {
 
 export function ReadingQuestionForm() {
   const { toast } = useToast()
-  const [savedQuestions, setSavedQuestions] = useState<any[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const {
     register,
@@ -42,7 +42,7 @@ export function ReadingQuestionForm() {
     name: "questions",
   })
 
-  const onSubmit = (data: ReadingForm) => {
+  const onSubmit = async (data: ReadingForm) => {
     // Filter out empty questions
     const validQuestions = data.questions.filter((q) => q.text.trim() !== "")
 
@@ -55,40 +55,48 @@ export function ReadingQuestionForm() {
       return
     }
 
-    // Save to localStorage (in real app, this would be an API call)
-    const existingQuestions = JSON.parse(localStorage.getItem("readingQuestions") || "[]")
-    const newQuestion = {
-      ...data,
-      questions: validQuestions,
-      id: Date.now(),
-      createdAt: new Date().toISOString(),
+    setIsSubmitting(true)
+
+    try {
+      // Save to database via API
+      const response = await fetch("/api/reading-questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: data.title,
+          passage: data.passage,
+          questions: JSON.stringify(validQuestions),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        toast({
+          title: "Reading questions saved",
+          description: `The reading passage with ${validQuestions.length} questions has been saved to database successfully.`,
+        })
+
+        reset({
+          title: "",
+          passage: "",
+          questions: [{ text: "" }],
+        })
+      } else {
+        throw new Error(result.error || "Failed to save questions")
+      }
+    } catch (error) {
+      console.error("Save error:", error)
+      toast({
+        title: "Save failed",
+        description: "Failed to save reading questions to database. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
-
-    const updatedQuestions = [...existingQuestions, newQuestion]
-    localStorage.setItem("readingQuestions", JSON.stringify(updatedQuestions))
-
-    toast({
-      title: "Reading questions saved",
-      description: `The reading passage with ${validQuestions.length} questions has been saved successfully.`,
-    })
-
-    reset({
-      title: "",
-      passage: "",
-      questions: [{ text: "" }],
-    })
-  }
-
-  const deleteQuestion = (id: number) => {
-    const existingQuestions = JSON.parse(localStorage.getItem("readingQuestions") || "[]")
-    const updatedQuestions = existingQuestions.filter((q: any) => q.id !== id)
-    localStorage.setItem("readingQuestions", JSON.stringify(updatedQuestions))
-    setSavedQuestions(updatedQuestions)
-
-    toast({
-      title: "Question deleted",
-      description: "The reading question has been deleted.",
-    })
   }
 
   const addQuestion = () => {
@@ -100,12 +108,6 @@ export function ReadingQuestionForm() {
       remove(index)
     }
   }
-
-  // Load saved questions on component mount
-  useState(() => {
-    const saved = JSON.parse(localStorage.getItem("readingQuestions") || "[]")
-    setSavedQuestions(saved)
-  })
 
   return (
     <div className="space-y-6">
@@ -174,9 +176,9 @@ export function ReadingQuestionForm() {
           {errors.questions && <p className="text-sm text-red-500">Please add at least one question.</p>}
         </div>
 
-        <Button type="submit" className="w-full">
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
           <Plus className="w-4 h-4 mr-2" />
-          Save Reading Questions
+          {isSubmitting ? "Saving..." : "Save Reading Questions"}
         </Button>
       </form>
     </div>

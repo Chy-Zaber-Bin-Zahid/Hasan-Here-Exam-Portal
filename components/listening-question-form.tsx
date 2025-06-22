@@ -25,6 +25,9 @@ export function ListeningQuestionForm() {
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioUrl, setAudioUrl] = useState<string>("")
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [uploadedAudioPath, setUploadedAudioPath] = useState<string>("")
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -46,13 +49,46 @@ export function ListeningQuestionForm() {
     name: "questions",
   })
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
       if (file.type.startsWith("audio/")) {
         setAudioFile(file)
         const url = URL.createObjectURL(file)
         setAudioUrl(url)
+
+        // Upload the audio file to server
+        setIsUploading(true)
+        try {
+          const formData = new FormData()
+          formData.append("audio", file)
+
+          const response = await fetch("/api/upload/audio", {
+            method: "POST",
+            body: formData,
+          })
+
+          const result = await response.json()
+
+          if (result.success) {
+            setUploadedAudioPath(result.path)
+            toast({
+              title: "Audio uploaded successfully",
+              description: `File ${result.originalName} has been uploaded.`,
+            })
+          } else {
+            throw new Error(result.error)
+          }
+        } catch (error) {
+          console.error("Upload error:", error)
+          toast({
+            title: "Upload failed",
+            description: "Failed to upload audio file. Please try again.",
+            variant: "destructive",
+          })
+        } finally {
+          setIsUploading(false)
+        }
       } else {
         toast({
           title: "Invalid file type",
@@ -74,8 +110,8 @@ export function ListeningQuestionForm() {
     }
   }
 
-  const onSubmit = (data: ListeningForm) => {
-    if (!audioFile) {
+  const onSubmit = async (data: ListeningForm) => {
+    if (!audioFile || !uploadedAudioPath) {
       toast({
         title: "Audio file required",
         description: "Please upload an audio file before saving.",
@@ -96,34 +132,53 @@ export function ListeningQuestionForm() {
       return
     }
 
-    // In a real app, you would upload the audio file to a server
-    // For now, we'll store the file name and questions
-    const existingQuestions = JSON.parse(localStorage.getItem("listeningQuestions") || "[]")
-    const newQuestion = {
-      ...data,
-      questions: validQuestions,
-      id: Date.now(),
-      audioFileName: audioFile.name,
-      audioSize: audioFile.size,
-      createdAt: new Date().toISOString(),
-    }
+    setIsSubmitting(true)
 
-    const updatedQuestions = [...existingQuestions, newQuestion]
-    localStorage.setItem("listeningQuestions", JSON.stringify(updatedQuestions))
+    try {
+      // Save to database via API
+      const response = await fetch("/api/listening-questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: data.title,
+          audio_url: uploadedAudioPath,
+          text: "", // Empty for now, can be added later if needed
+          questions: JSON.stringify(validQuestions),
+        }),
+      })
 
-    toast({
-      title: "Listening questions saved",
-      description: `The audio file with ${validQuestions.length} questions has been saved successfully.`,
-    })
+      const result = await response.json()
 
-    reset({
-      title: "",
-      questions: [{ text: "" }],
-    })
-    setAudioFile(null)
-    setAudioUrl("")
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
+      if (response.ok) {
+        toast({
+          title: "Listening questions saved",
+          description: `The audio file with ${validQuestions.length} questions has been saved to database successfully.`,
+        })
+
+        reset({
+          title: "",
+          questions: [{ text: "" }],
+        })
+        setAudioFile(null)
+        setAudioUrl("")
+        setUploadedAudioPath("")
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ""
+        }
+      } else {
+        throw new Error(result.error || "Failed to save questions")
+      }
+    } catch (error) {
+      console.error("Save error:", error)
+      toast({
+        title: "Save failed",
+        description: "Failed to save listening questions to database. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -158,14 +213,16 @@ export function ListeningQuestionForm() {
               variant="outline"
               onClick={() => fileInputRef.current?.click()}
               className="flex items-center gap-2"
+              disabled={isUploading}
             >
               <Upload className="w-4 h-4" />
-              Upload Audio
+              {isUploading ? "Uploading..." : "Upload Audio"}
             </Button>
             <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileChange} className="hidden" />
             {audioFile && (
               <span className="text-sm text-gray-600">
                 {audioFile.name} ({(audioFile.size / 1024 / 1024).toFixed(2)} MB)
+                {uploadedAudioPath && <span className="text-green-600 ml-2">✓ Uploaded</span>}
               </span>
             )}
           </div>
@@ -220,9 +277,9 @@ export function ListeningQuestionForm() {
           {errors.questions && <p className="text-sm text-red-500">Please add at least one question.</p>}
         </div>
 
-        <Button type="submit" className="w-full">
+        <Button type="submit" className="w-full" disabled={isUploading || isSubmitting}>
           <Plus className="w-4 h-4 mr-2" />
-          Save Listening Questions
+          {isSubmitting ? "Saving..." : "Save Listening Questions"}
         </Button>
       </form>
     </div>

@@ -28,21 +28,36 @@ export function TeacherModal({ open, onOpenChange }: TeacherModalProps) {
     reset,
   } = useForm<TeacherForm>()
 
-  const onSubmit = (data: TeacherForm) => {
-    // Simple password check - in real app, this would be more secure
-    if (data.password === "teacher123") {
-      toast({
-        title: "Access granted",
-        description: "Welcome to the admin dashboard!",
+  const onSubmit = async (data: TeacherForm) => {
+    try {
+      const response = await fetch("/api/auth/teacher-access", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password: data.password }),
       })
 
-      onOpenChange(false)
-      reset()
-      router.push("/teacher")
-    } else {
+      if (response.ok) {
+        toast({
+          title: "Access granted",
+          description: "Welcome to the teacher dashboard!",
+        })
+
+        onOpenChange(false)
+        reset()
+        router.push("/teacher")
+      } else {
+        toast({
+          title: "Access denied",
+          description: "Incorrect password. Please try again.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
       toast({
-        title: "Access denied",
-        description: "Incorrect password. Please try again.",
+        title: "Error",
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       })
     }
@@ -68,9 +83,6 @@ export function TeacherModal({ open, onOpenChange }: TeacherModalProps) {
               })}
             />
             {errors.password && <p className="text-sm text-red-500">{errors.password.message}</p>}
-          </div>
-          <div className="text-sm text-gray-600">
-            <p>Demo password: teacher123</p>
           </div>
           <div className="flex gap-2 pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="flex-1">

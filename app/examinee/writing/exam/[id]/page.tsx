@@ -17,7 +17,8 @@ interface WritingQuestion {
   title: string
   prompt: string
   instructions: string
-  createdAt: string
+  word_limit?: number
+  created_at: string
 }
 
 export default function WritingExamPage() {
@@ -34,6 +35,7 @@ export default function WritingExamPage() {
   const [examineeName, setExamineeName] = useState("")
   const [examineeId, setExamineeId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [loading, setLoading] = useState(true)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -48,47 +50,60 @@ export default function WritingExamPage() {
     setExamineeName(name)
     setExamineeId(id)
 
-    // Load exam data
-    const writingQuestions = JSON.parse(localStorage.getItem("writingQuestions") || "[]")
-    const question = writingQuestions.find((q: WritingQuestion) => q.id.toString() === examId)
+    // Load exam data from database
+    loadExamFromDatabase(examId)
+  }, [examId, router])
 
-    if (!question) {
+  const loadExamFromDatabase = async (examId: string) => {
+    try {
+      console.log("🔍 Loading writing exam from database, ID:", examId)
+
+      const response = await fetch("/api/writing-questions")
+      const data = await response.json()
+
+      console.log("✍️ Database response:", data)
+
+      // Handle different response formats
+      let questions = []
+      if (data.success && Array.isArray(data.questions)) {
+        questions = data.questions
+      } else if (Array.isArray(data)) {
+        questions = data
+      }
+
+      const question = questions.find((q: WritingQuestion) => q.id.toString() === examId)
+
+      if (!question) {
+        toast({
+          title: "Exam not found",
+          description: "The requested exam could not be found in the database.",
+          variant: "destructive",
+        })
+        router.push("/examinee/writing")
+        return
+      }
+
+      console.log("✅ Writing exam loaded:", {
+        title: question.title,
+        prompt: question.prompt ? "Present" : "Missing",
+        instructions: question.instructions ? "Present" : "Missing",
+      })
+
+      setExamData(question)
+
+      // Start timer
+      startTimer()
+      setLoading(false)
+    } catch (error) {
+      console.error("❌ Error loading writing exam from database:", error)
       toast({
-        title: "Exam not found",
-        description: "The requested exam could not be found.",
+        title: "Loading error",
+        description: "Failed to load exam from database. Please try again.",
         variant: "destructive",
       })
       router.push("/examinee/writing")
-      return
     }
-
-    setExamData(question)
-
-    // Create writing test folder
-    const currentExaminee = localStorage.getItem("currentExaminee") || `${name}_${id}`
-    const examineeFolder = JSON.parse(localStorage.getItem(currentExaminee) || "{}")
-
-    if (!examineeFolder.activeExams) {
-      examineeFolder.activeExams = {}
-    }
-
-    examineeFolder.activeExams.writing_test = {
-      questionId: question.id,
-      startTime: new Date().toISOString(),
-      status: "in_progress",
-    }
-
-    localStorage.setItem(currentExaminee, JSON.stringify(examineeFolder))
-
-    // Start timer
-    startTimer()
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-    }
-  }, [examId, router, toast])
+  }
 
   const startTimer = () => {
     timerRef.current = setInterval(() => {
@@ -197,47 +212,46 @@ export default function WritingExamPage() {
         clearInterval(timerRef.current)
       }
 
-      const currentExaminee = localStorage.getItem("currentExaminee") || `${examineeName}_${examineeId}`
-      const examineeFolder = JSON.parse(localStorage.getItem(currentExaminee) || "{}")
-
       // Generate PDF
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
-      // Create PDF data URL for storage simulation
+      // Create PDF data URL for storage
       const reader = new FileReader()
-      reader.onload = () => {
+      reader.onload = async () => {
         const pdfDataUrl = reader.result as string
 
-        // Save exam results
-        if (!examineeFolder.examResults) {
-          examineeFolder.examResults = {}
-        }
-
-        examineeFolder.examResults.writing_test = {
-          examId: examData?.id,
-          examTitle: examData?.title,
-          answer: answer,
-          submittedAt: new Date().toISOString(),
-          timeSpent: Math.floor((Date.now() - examStartTime) / 1000),
-          pdfData: pdfDataUrl,
-          status: "completed",
-        }
-
-        // Remove from active exams
-        if (examineeFolder.activeExams?.writing_test) {
-          delete examineeFolder.activeExams.writing_test
-        }
-
-        localStorage.setItem(currentExaminee, JSON.stringify(examineeFolder))
-
-        toast({
-          title: "Exam submitted successfully",
-          description: "Your writing exam has been submitted and saved as PDF.",
+        // Submit to API
+        const response = await fetch("/api/submit-exam", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            examType: "writing",
+            examId: examData?.id,
+            examTitle: examData?.title,
+            examineeName: examineeName,
+            examineeId: examineeId,
+            answers: { answer },
+            pdfData: pdfDataUrl,
+            timeSpent: Math.floor((Date.now() - examStartTime) / 1000),
+          }),
         })
 
-        // Navigate back to examinee dashboard
-        router.push("/examinee")
+        const result = await response.json()
+
+        if (result.success) {
+          toast({
+            title: "Exam submitted successfully",
+            description: `Your writing exam has been saved to: ${result.folderPath}`,
+          })
+
+          // Navigate back to examinee dashboard
+          router.push("/examinee")
+        } else {
+          throw new Error(result.error || "Submission failed")
+        }
       }
 
       reader.readAsDataURL(pdfBlob)
@@ -261,13 +275,39 @@ export default function WritingExamPage() {
     handleSubmit()
   }
 
-  if (!examData) {
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+    }
+  }, [])
+
+  if (loading) {
     return (
       <ProtectedRoute>
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading exam...</p>
+            <p className="text-gray-600">Loading exam from database...</p>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
+  if (!examData) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Not Found</h2>
+            <p className="text-gray-600">The requested exam could not be loaded.</p>
+            <Button onClick={() => router.push("/examinee/writing")} className="mt-4">
+              Back to Writing Exams
+            </Button>
           </div>
         </div>
       </ProtectedRoute>
@@ -305,6 +345,7 @@ export default function WritingExamPage() {
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <FileText className="w-4 h-4" />
                   <span>{wordCount} words</span>
+                  {examData.word_limit && <span className="text-xs text-gray-500">/ {examData.word_limit} limit</span>}
                 </div>
                 <div
                   className={`flex items-center gap-2 px-3 py-1 rounded-full ${isTimeWarning ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}
@@ -350,7 +391,9 @@ export default function WritingExamPage() {
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-3">Prompt:</h3>
                     <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-gray-800 whitespace-pre-wrap leading-relaxed break-words">{examData.prompt}</p>
+                      <p className="text-gray-800 whitespace-pre-wrap leading-relaxed break-words">
+                        {examData.prompt || "No prompt available for this exam."}
+                      </p>
                     </div>
                   </div>
 
@@ -361,6 +404,15 @@ export default function WritingExamPage() {
                         <p className="text-blue-800 whitespace-pre-wrap leading-relaxed break-words">
                           {examData.instructions}
                         </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {examData.word_limit && (
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-3">Word Limit:</h3>
+                      <div className="bg-yellow-50 p-4 rounded-lg">
+                        <p className="text-yellow-800">Maximum {examData.word_limit} words</p>
                       </div>
                     </div>
                   )}
@@ -378,7 +430,15 @@ export default function WritingExamPage() {
                   </span>
                   <div className="flex items-center gap-2">
                     {answer.trim() && <CheckCircle className="w-4 h-4 text-green-600" />}
-                    <span className="text-sm text-gray-500">{wordCount} words</span>
+                    <span className="text-sm text-gray-500">
+                      {wordCount} words
+                      {examData.word_limit && (
+                        <span className={wordCount > examData.word_limit ? "text-red-500" : ""}>
+                          {" "}
+                          / {examData.word_limit}
+                        </span>
+                      )}
+                    </span>
                   </div>
                 </CardTitle>
               </CardHeader>
@@ -389,6 +449,11 @@ export default function WritingExamPage() {
                   placeholder="Type your answer here..."
                   className="flex-1 min-h-[400px] resize-none text-base leading-relaxed"
                 />
+                {examData.word_limit && wordCount > examData.word_limit && (
+                  <p className="text-sm text-red-500 mt-2">
+                    Warning: You have exceeded the word limit by {wordCount - examData.word_limit} words.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>

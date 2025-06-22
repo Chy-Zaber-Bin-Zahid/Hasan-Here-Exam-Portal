@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Eye } from "lucide-react"
+import { Edit, Trash2, Eye, Loader2 } from "lucide-react"
 import { ViewListeningQuestionModal } from "@/components/view-listening-question-modal"
 import { EditListeningQuestionModal } from "@/components/edit-listening-question-modal"
 import { Input } from "@/components/ui/input"
@@ -14,51 +14,95 @@ import { CalendarIcon, Search } from "lucide-react"
 export function ManageListeningQuestions() {
   const { toast } = useToast()
   const [questions, setQuestions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [viewingQuestion, setViewingQuestion] = useState<any>(null)
   const [editingQuestion, setEditingQuestion] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [dateFilter, setDateFilter] = useState("all")
 
   useEffect(() => {
-    loadQuestions()
+    loadQuestionsFromDatabase()
   }, [])
 
-  const loadQuestions = () => {
-    const saved = JSON.parse(localStorage.getItem("listeningQuestions") || "[]")
-    setQuestions(saved)
+  const loadQuestionsFromDatabase = async () => {
+    try {
+      setLoading(true)
+      console.log("🔍 Loading listening questions from database...")
+
+      const response = await fetch("/api/listening-questions")
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      // Handle different response formats safely
+      const questionsArray = Array.isArray(data) ? data : data.questions || []
+      console.log("🎧 Listening questions loaded:", questionsArray.length)
+      setQuestions(questionsArray)
+    } catch (error) {
+      console.error("❌ Error loading listening questions:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load listening questions from database.",
+        variant: "destructive",
+      })
+      setQuestions([])
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const filteredQuestions = questions.filter((question) => {
-    const matchesSearch = question.title.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredQuestions = Array.isArray(questions)
+    ? questions.filter((question) => {
+        const matchesSearch = question.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false
 
-    if (dateFilter === "all") return matchesSearch
+        if (dateFilter === "all") return matchesSearch
 
-    const questionDate = new Date(question.createdAt)
-    const now = new Date()
+        const questionDate = new Date(question.created_at)
+        const now = new Date()
 
-    switch (dateFilter) {
-      case "today":
-        return matchesSearch && questionDate.toDateString() === now.toDateString()
-      case "week":
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        return matchesSearch && questionDate >= weekAgo
-      case "month":
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        return matchesSearch && questionDate >= monthAgo
-      default:
-        return matchesSearch
+        switch (dateFilter) {
+          case "today":
+            return matchesSearch && questionDate.toDateString() === now.toDateString()
+          case "week":
+            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+            return matchesSearch && questionDate >= weekAgo
+          case "month":
+            const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+            return matchesSearch && questionDate >= monthAgo
+          default:
+            return matchesSearch
+        }
+      })
+    : []
+
+  const deleteQuestion = async (id: number) => {
+    try {
+      console.log("🗑️ Deleting listening question:", id)
+
+      const response = await fetch(`/api/listening-questions/${id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      setQuestions(questions.filter((q) => q.id !== id))
+
+      toast({
+        title: "Question deleted",
+        description: "The listening question set has been deleted successfully.",
+      })
+    } catch (error) {
+      console.error("❌ Error deleting question:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete the question.",
+        variant: "destructive",
+      })
     }
-  })
-
-  const deleteQuestion = (id: number) => {
-    const updatedQuestions = questions.filter((q) => q.id !== id)
-    localStorage.setItem("listeningQuestions", JSON.stringify(updatedQuestions))
-    setQuestions(updatedQuestions)
-
-    toast({
-      title: "Question deleted",
-      description: "The listening question set has been deleted successfully.",
-    })
   }
 
   const handleView = (question: any) => {
@@ -67,6 +111,48 @@ export function ManageListeningQuestions() {
 
   const handleEdit = (question: any) => {
     setEditingQuestion(question)
+  }
+
+  const handleEditSave = async (updatedQuestion: any) => {
+    try {
+      console.log("✏️ Updating listening question:", updatedQuestion.id)
+
+      const response = await fetch(`/api/listening-questions/${updatedQuestion.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedQuestion),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      setQuestions(questions.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q)))
+      setEditingQuestion(null)
+
+      toast({
+        title: "Question updated",
+        description: "The listening question set has been updated successfully.",
+      })
+    } catch (error) {
+      console.error("❌ Error updating question:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update the question.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-6 h-6 animate-spin mr-2" />
+        <span>Loading listening questions from database...</span>
+      </div>
+    )
   }
 
   return (
@@ -115,7 +201,7 @@ export function ManageListeningQuestions() {
         <div className="text-center py-8">
           {questions.length === 0 ? (
             <>
-              <p className="text-gray-500 mb-4">No listening questions found.</p>
+              <p className="text-gray-500 mb-4">No listening questions found in database.</p>
               <p className="text-sm text-gray-400">Create some questions first to manage them here.</p>
             </>
           ) : (
@@ -126,49 +212,59 @@ export function ManageListeningQuestions() {
           )}
         </div>
       ) : (
-        filteredQuestions.map((question) => (
-          <Card key={question.id}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-base">{question.title}</CardTitle>
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => handleView(question)}>
-                  <Eye className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleEdit(question)}>
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteQuestion(question.id)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <p className="text-sm text-gray-600">
-                  <strong>Audio:</strong> {question.audioFileName} ({(question.audioSize / 1024 / 1024).toFixed(2)} MB)
-                </p>
-                <p className="text-sm text-gray-600">
-                  <strong>Questions:</strong> {question.questions.length} questions
-                </p>
-                <div className="text-sm text-gray-600">
-                  <strong>First Question Preview:</strong>
-                  <div className="bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap text-xs break-words overflow-hidden">
-                    {question.questions[0]?.text.substring(0, 100)}...
-                  </div>
+        filteredQuestions.map((question) => {
+          const questionsData =
+            typeof question.questions === "string" ? JSON.parse(question.questions) : question.questions
+
+          return (
+            <Card key={question.id}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-base">{question.title || `Question ${question.id}`}</CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => handleView(question)}>
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(question)}>
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteQuestion(question.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
-                <p className="text-xs text-gray-400">Created: {new Date(question.createdAt).toLocaleDateString()}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">
+                    <strong>Audio:</strong> {question.audio_filename || "No filename"}
+                    {question.audio_size && ` (${(question.audio_size / 1024 / 1024).toFixed(2)} MB)`}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <strong>Questions:</strong> {Array.isArray(questionsData) ? questionsData.length : 0} questions
+                  </p>
+                  {Array.isArray(questionsData) && questionsData.length > 0 && (
+                    <div className="text-sm text-gray-600">
+                      <strong>First Question Preview:</strong>
+                      <div className="bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap text-xs break-words overflow-hidden">
+                        {questionsData[0]?.text?.substring(0, 100)}...
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    Created: {question.created_at ? new Date(question.created_at).toLocaleDateString() : "Unknown"}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })
       )}
 
-      {/* Modals remain the same */}
+      {/* Modals */}
       {viewingQuestion && (
         <ViewListeningQuestionModal
           question={viewingQuestion}
@@ -181,16 +277,7 @@ export function ManageListeningQuestions() {
           question={editingQuestion}
           open={!!editingQuestion}
           onOpenChange={(open) => !open && setEditingQuestion(null)}
-          onSave={(updatedQuestion) => {
-            const updatedQuestions = questions.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q))
-            localStorage.setItem("listeningQuestions", JSON.stringify(updatedQuestions))
-            setQuestions(updatedQuestions)
-            setEditingQuestion(null)
-            toast({
-              title: "Question updated",
-              description: "The listening question set has been updated successfully.",
-            })
-          }}
+          onSave={handleEditSave}
         />
       )}
     </div>

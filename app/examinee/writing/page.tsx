@@ -29,9 +29,27 @@ export default function WritingSelectionPage() {
 
     setExamineeName(name)
 
-    // Load writing questions
-    const questions = JSON.parse(localStorage.getItem("writingQuestions") || "[]")
-    setWritingQuestions(questions)
+    // Load writing questions from database
+    const loadQuestions = async () => {
+      try {
+        console.log("🔍 Loading writing questions from database...")
+        const response = await fetch("/api/writing-questions")
+        if (response.ok) {
+          const data = await response.json()
+          const questions = Array.isArray(data) ? data : data.questions || []
+          console.log("✍️ Writing questions loaded from database:", questions.length)
+          setWritingQuestions(questions)
+        } else {
+          console.error("Failed to load writing questions")
+          setWritingQuestions([])
+        }
+      } catch (error) {
+        console.error("Error loading writing questions:", error)
+        setWritingQuestions([])
+      }
+    }
+
+    loadQuestions()
   }, [router])
 
   const filteredQuestions = writingQuestions.filter((question) => {

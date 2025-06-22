@@ -10,15 +10,15 @@ import { Progress } from "@/components/ui/progress"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
-import { Clock, CheckCircle, AlertTriangle, Headphones, User, Play, Volume2 } from "lucide-react"
+import { Clock, CheckCircle, AlertTriangle, Headphones, User, Play, Volume2, Pause } from "lucide-react"
 
 interface ListeningQuestion {
   id: number
   title: string
-  audioFile: File | null
-  audioUrl?: string
-  questions: { text: string }[]
-  createdAt: string
+  audio_url: string
+  questions: string | any[]
+  text?: string
+  created_at: string
 }
 
 export default function ListeningExamPage() {
@@ -38,6 +38,8 @@ export default function ListeningExamPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [audioPlayed, setAudioPlayed] = useState(false)
   const [audioEnded, setAudioEnded] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [isPlaying, setIsPlaying] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -52,48 +54,79 @@ export default function ListeningExamPage() {
     setExamineeName(name)
     setExamineeId(id)
 
-    // Load exam data
-    const listeningQuestions = JSON.parse(localStorage.getItem("listeningQuestions") || "[]")
-    const question = listeningQuestions.find((q: ListeningQuestion) => q.id.toString() === examId)
+    // Load exam data from database
+    loadExamFromDatabase(examId)
+  }, [examId, router])
 
-    if (!question) {
+  const loadExamFromDatabase = async (examId: string) => {
+    try {
+      console.log("🔍 Loading listening exam from database, ID:", examId)
+
+      const response = await fetch("/api/listening-questions")
+      const data = await response.json()
+
+      console.log("🎧 Database response:", data)
+
+      // Handle different response formats
+      let questions = []
+      if (data.success && Array.isArray(data.questions)) {
+        questions = data.questions
+      } else if (Array.isArray(data)) {
+        questions = data
+      }
+
+      const question = questions.find((q: ListeningQuestion) => q.id.toString() === examId)
+
+      if (!question) {
+        toast({
+          title: "Exam not found",
+          description: "The requested exam could not be found in the database.",
+          variant: "destructive",
+        })
+        router.push("/examinee/listening")
+        return
+      }
+
+      // Parse questions if they're stored as JSON string
+      let parsedQuestions = []
+      try {
+        if (typeof question.questions === "string") {
+          parsedQuestions = JSON.parse(question.questions)
+        } else if (Array.isArray(question.questions)) {
+          parsedQuestions = question.questions
+        }
+      } catch (error) {
+        console.error("Error parsing questions:", error)
+        parsedQuestions = []
+      }
+
+      const examWithParsedQuestions = {
+        ...question,
+        questions: parsedQuestions,
+      }
+
+      console.log("✅ Listening exam loaded:", {
+        title: examWithParsedQuestions.title,
+        questionsCount: parsedQuestions.length,
+        audioUrl: examWithParsedQuestions.audio_url ? "Present" : "Missing",
+      })
+
+      setExamData(examWithParsedQuestions)
+      setAnswers(new Array(parsedQuestions.length).fill(""))
+
+      // Start timer
+      startTimer()
+      setLoading(false)
+    } catch (error) {
+      console.error("❌ Error loading listening exam from database:", error)
       toast({
-        title: "Exam not found",
-        description: "The requested exam could not be found.",
+        title: "Loading error",
+        description: "Failed to load exam from database. Please try again.",
         variant: "destructive",
       })
       router.push("/examinee/listening")
-      return
     }
-
-    setExamData(question)
-    setAnswers(new Array(question.questions.length).fill(""))
-
-    // Create listening test folder
-    const currentExaminee = localStorage.getItem("currentExaminee") || `${name}_${id}`
-    const examineeFolder = JSON.parse(localStorage.getItem(currentExaminee) || "{}")
-
-    if (!examineeFolder.activeExams) {
-      examineeFolder.activeExams = {}
-    }
-
-    examineeFolder.activeExams.listening_test = {
-      questionId: question.id,
-      startTime: new Date().toISOString(),
-      status: "in_progress",
-    }
-
-    localStorage.setItem(currentExaminee, JSON.stringify(examineeFolder))
-
-    // Start timer
-    startTimer()
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-    }
-  }, [examId, router, toast])
+  }
 
   const startTimer = () => {
     timerRef.current = setInterval(() => {
@@ -122,14 +155,34 @@ export default function ListeningExamPage() {
   }
 
   const handlePlayAudio = () => {
-    if (audioRef.current && !audioPlayed) {
-      // Create a demo audio URL for testing (you can replace this with actual audio)
-      const demoAudioUrl =
-        "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBjiR1/LNeSsFJHfH8N2QQAoUXrTp66hVF"
+    if (audioRef.current && examData?.audio_url) {
+      if (isPlaying) {
+        audioRef.current.pause()
+        setIsPlaying(false)
+      } else {
+        // Set the audio source to the correct path
+        const audioPath = examData.audio_url.startsWith("/")
+          ? examData.audio_url
+          : `/api/files/audio/${examData.audio_url}`
 
-      audioRef.current.src = demoAudioUrl
-      audioRef.current.play()
-      setAudioPlayed(true)
+        console.log("🎵 Playing audio from:", audioPath)
+
+        audioRef.current.src = audioPath
+        audioRef.current
+          .play()
+          .then(() => {
+            setAudioPlayed(true)
+            setIsPlaying(true)
+          })
+          .catch((error) => {
+            console.error("❌ Audio play error:", error)
+            toast({
+              title: "Audio Error",
+              description: "Could not play the audio file. Please check if the file exists.",
+              variant: "destructive",
+            })
+          })
+      }
     }
   }
 
@@ -176,12 +229,20 @@ export default function ListeningExamPage() {
     )
     yPosition += 15
 
+    // Audio Info
+    doc.setFont("helvetica", "bold")
+    yPosition = addWrappedText("Audio File:", margin, yPosition, pageWidth - 2 * margin, 14)
+    yPosition += 5
+    doc.setFont("helvetica", "normal")
+    yPosition = addWrappedText(examData?.audio_url || "No audio file", margin, yPosition, pageWidth - 2 * margin)
+    yPosition += 15
+
     // Questions and Answers
     doc.setFont("helvetica", "bold")
     yPosition = addWrappedText("Questions and Answers:", margin, yPosition, pageWidth - 2 * margin, 14)
     yPosition += 10
 
-    examData?.questions.forEach((question, index) => {
+    examData?.questions.forEach((question: any, index: number) => {
       if (yPosition > 250) {
         doc.addPage()
         yPosition = margin
@@ -192,7 +253,8 @@ export default function ListeningExamPage() {
       yPosition = addWrappedText(`Question ${index + 1}:`, margin, yPosition, pageWidth - 2 * margin)
       yPosition += 5
       doc.setFont("helvetica", "normal")
-      yPosition = addWrappedText(question.text, margin, yPosition, pageWidth - 2 * margin)
+      const questionText = question.text || question.question || `Question ${index + 1}`
+      yPosition = addWrappedText(questionText, margin, yPosition, pageWidth - 2 * margin)
       yPosition += 10
 
       // Answer
@@ -219,47 +281,52 @@ export default function ListeningExamPage() {
         clearInterval(timerRef.current)
       }
 
-      const currentExaminee = localStorage.getItem("currentExaminee") || `${examineeName}_${examineeId}`
-      const examineeFolder = JSON.parse(localStorage.getItem(currentExaminee) || "{}")
+      // Stop audio if playing
+      if (audioRef.current) {
+        audioRef.current.pause()
+        setIsPlaying(false)
+      }
 
       // Generate PDF
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
-      // Create PDF data URL for storage simulation
+      // Create PDF data URL for storage
       const reader = new FileReader()
-      reader.onload = () => {
+      reader.onload = async () => {
         const pdfDataUrl = reader.result as string
 
-        // Save exam results
-        if (!examineeFolder.examResults) {
-          examineeFolder.examResults = {}
-        }
-
-        examineeFolder.examResults.listening_test = {
-          examId: examData?.id,
-          examTitle: examData?.title,
-          answers: answers,
-          submittedAt: new Date().toISOString(),
-          timeSpent: Math.floor((Date.now() - examStartTime) / 1000),
-          pdfData: pdfDataUrl,
-          status: "completed",
-        }
-
-        // Remove from active exams
-        if (examineeFolder.activeExams?.listening_test) {
-          delete examineeFolder.activeExams.listening_test
-        }
-
-        localStorage.setItem(currentExaminee, JSON.stringify(examineeFolder))
-
-        toast({
-          title: "Exam submitted successfully",
-          description: "Your listening exam has been submitted and saved as PDF.",
+        // Submit to API
+        const response = await fetch("/api/submit-exam", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            examType: "listening",
+            examId: examData?.id,
+            examTitle: examData?.title,
+            examineeName: examineeName,
+            examineeId: examineeId,
+            answers: answers,
+            pdfData: pdfDataUrl,
+            timeSpent: Math.floor((Date.now() - examStartTime) / 1000),
+          }),
         })
 
-        // Navigate back to examinee dashboard
-        router.push("/examinee")
+        const result = await response.json()
+
+        if (result.success) {
+          toast({
+            title: "Exam submitted successfully",
+            description: `Your listening exam has been saved to: ${result.folderPath}`,
+          })
+
+          // Navigate back to examinee dashboard
+          router.push("/examinee")
+        } else {
+          throw new Error(result.error || "Submission failed")
+        }
       }
 
       reader.readAsDataURL(pdfBlob)
@@ -283,13 +350,42 @@ export default function ListeningExamPage() {
     handleSubmit()
   }
 
-  if (!examData) {
+  // Cleanup timer and audio on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+    }
+  }, [])
+
+  if (loading) {
     return (
       <ProtectedRoute>
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading exam...</p>
+            <p className="text-gray-600">Loading exam from database...</p>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
+  if (!examData) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <Headphones className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Not Found</h2>
+            <p className="text-gray-600">The requested exam could not be loaded.</p>
+            <Button onClick={() => router.push("/examinee/listening")} className="mt-4">
+              Back to Listening Exams
+            </Button>
           </div>
         </div>
       </ProtectedRoute>
@@ -306,8 +402,19 @@ export default function ListeningExamPage() {
         {/* Hidden audio element */}
         <audio
           ref={audioRef}
-          onEnded={() => setAudioEnded(true)}
-          onError={(e) => console.error("Audio error:", e)}
+          onEnded={() => {
+            setAudioEnded(true)
+            setIsPlaying(false)
+          }}
+          onError={(e) => {
+            console.error("Audio error:", e)
+            toast({
+              title: "Audio Error",
+              description: "There was an error playing the audio file.",
+              variant: "destructive",
+            })
+            setIsPlaying(false)
+          }}
           preload="metadata"
         />
 
@@ -386,19 +493,23 @@ export default function ListeningExamPage() {
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-gray-900">Listen to the audio</h3>
                     <p className="text-sm text-gray-600 max-w-md">
-                      Click the play button below to start the audio. You can only play the audio once, so listen
-                      carefully.
+                      Click the play button below to start the audio. Listen carefully and answer the questions.
                     </p>
+                    {examData.text && (
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <p className="text-sm text-blue-800">{examData.text}</p>
+                      </div>
+                    )}
                   </div>
 
                   <Button
                     onClick={handlePlayAudio}
-                    disabled={audioPlayed}
+                    disabled={!examData.audio_url}
                     size="lg"
                     className="flex items-center gap-2"
                   >
-                    <Play className="w-5 h-5" />
-                    {audioPlayed ? "Audio Played" : "Play Audio"}
+                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    {isPlaying ? "Pause Audio" : "Play Audio"}
                   </Button>
 
                   {audioPlayed && (
@@ -414,6 +525,10 @@ export default function ListeningExamPage() {
                       <span>Audio playback completed</span>
                     </div>
                   )}
+
+                  {!examData.audio_url && (
+                    <div className="text-sm text-red-600">No audio file available for this exam.</div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -425,7 +540,7 @@ export default function ListeningExamPage() {
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto">
                 <div className="space-y-6">
-                  {examData.questions.map((question, index) => (
+                  {examData.questions.map((question: any, index: number) => (
                     <div key={index} className="space-y-3">
                       <div className="flex items-start gap-3">
                         <div className="flex-shrink-0 w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center text-sm font-medium text-purple-600">
@@ -433,7 +548,7 @@ export default function ListeningExamPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
-                            {question.text}
+                            {question.text || question.question || `Question ${index + 1}`}
                           </label>
                           <div className="relative">
                             <Textarea
