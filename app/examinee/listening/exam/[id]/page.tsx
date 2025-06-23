@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
-import { Clock, CheckCircle, AlertTriangle, Headphones, User, Play, Volume2, Pause } from "lucide-react"
+import { Clock, CheckCircle, AlertTriangle, Headphones, User, Play, Volume2 } from "lucide-react"
 
 interface ListeningQuestion {
   id: number
@@ -31,15 +31,14 @@ export default function ListeningExamPage() {
 
   const [examData, setExamData] = useState<ListeningQuestion | null>(null)
   const [answers, setAnswers] = useState<string[]>([])
-  const [timeLeft, setTimeLeft] = useState(3600) // 60 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState<number | null>(null)
+  const [totalDuration, setTotalDuration] = useState<number | null>(null);
   const [examStartTime] = useState(Date.now())
   const [examineeName, setExamineeName] = useState("")
   const [examineeId, setExamineeId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [audioPlayed, setAudioPlayed] = useState(false)
-  const [audioEnded, setAudioEnded] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [isPlaying, setIsPlaying] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -55,23 +54,19 @@ export default function ListeningExamPage() {
     setExamineeId(id)
 
     if (examId) {
-        loadExamFromDatabase(examId)
+      loadExamFromDatabase(examId)
     }
   }, [examId, router])
 
-  // FIX: Updated data fetching logic to get a single exam by ID
   const loadExamFromDatabase = async (examId: string) => {
     try {
-      console.log("🔍 Loading listening exam from database, ID:", examId)
-
+      setLoading(true);
       const response = await fetch(`/api/listening-questions/${examId}`)
       if (!response.ok) {
         throw new Error(`Exam not found or failed to load. Status: ${response.status}`)
       }
-
       const data = await response.json();
       const question = data.question;
-
 
       if (!question) {
         toast({
@@ -80,7 +75,7 @@ export default function ListeningExamPage() {
           variant: "destructive",
         })
         router.push("/examinee/listening")
-        return
+        return;
       }
 
       let parsedQuestions = []
@@ -94,17 +89,10 @@ export default function ListeningExamPage() {
         console.error("Error parsing questions:", error)
         parsedQuestions = []
       }
-
-      const examWithParsedQuestions = {
-        ...question,
-        questions: parsedQuestions,
-      }
-
+      
+      const examWithParsedQuestions = { ...question, questions: parsedQuestions }
       setExamData(examWithParsedQuestions)
       setAnswers(new Array(parsedQuestions.length).fill(""))
-
-      startTimer()
-      setLoading(false)
     } catch (error) {
       console.error("❌ Error loading listening exam from database:", error)
       toast({
@@ -113,13 +101,63 @@ export default function ListeningExamPage() {
         variant: "destructive",
       })
       router.push("/examinee/listening")
+    } finally {
+      // FIX: Always set loading to false after attempting to fetch data.
+      // The timer logic will now be handled separately.
+      setLoading(false);
     }
   }
 
-  const startTimer = () => {
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !examData) return;
+
+    const handleMetadata = () => {
+      if (audio.duration && audio.duration !== Infinity) {
+        const audioDuration = Math.ceil(audio.duration);
+        const extraTime = 120; // 2 minutes
+        const totalExamTime = audioDuration + extraTime;
+        
+        setTimeLeft(totalExamTime);
+        setTotalDuration(totalExamTime);
+        startTimer(totalExamTime);
+      } else {
+        handleError();
+      }
+    };
+
+    const handleError = () => {
+      toast({
+        title: "Audio Error",
+        description: "Could not determine audio duration. Using a default 60-minute timer.",
+        variant: "destructive",
+      });
+      const defaultTime = 3600;
+      setTimeLeft(defaultTime);
+      setTotalDuration(defaultTime);
+      startTimer(defaultTime);
+    };
+
+    audio.addEventListener('loadedmetadata', handleMetadata);
+    audio.addEventListener('error', handleError);
+    
+    if (audio.readyState >= 1 && !timeLeft) {
+      handleMetadata();
+    }
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', handleMetadata);
+      audio.removeEventListener('error', handleError);
+    };
+  }, [examData]);
+
+  const startTimer = (initialTime: number) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setTimeLeft(initialTime);
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
-        if (prev <= 1) {
+        if (prev === null || prev <= 1) {
+          if(timerRef.current) clearInterval(timerRef.current);
           handleAutoSubmit()
           return 0
         }
@@ -128,56 +166,27 @@ export default function ListeningExamPage() {
     }, 1000)
   }
 
-  const formatTime = (seconds: number) => {
+  const formatTime = (seconds: number | null) => {
+    if (seconds === null) return "Calculating...";
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
     return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
   }
 
-  const countWords = (text: string) => {
-    return text
-      .trim()
-      .split(/\s+/)
-      .filter((word) => word.length > 0).length
-  }
-
   const handlePlayAudio = () => {
-    if (audioRef.current) {
-        if (isPlaying) {
-            audioRef.current.pause();
-        } else {
-            audioRef.current.play().catch(error => {
-                console.error("❌ Audio play error:", error)
-                toast({
-                  title: "Audio Error",
-                  description: "Could not play the audio file.",
-                  variant: "destructive",
-                })
-            });
-        }
+    if (audioRef.current && !audioPlayed) {
+        audioRef.current.play().catch(error => {
+            console.error("❌ Audio play error:", error)
+            toast({
+              title: "Audio Error",
+              description: "Could not play the audio file.",
+              variant: "destructive",
+            })
+        });
+        setAudioPlayed(true);
     }
   }
-  
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      const play = () => setIsPlaying(true);
-      const pause = () => setIsPlaying(false);
-      const ended = () => {
-        setAudioEnded(true);
-        setIsPlaying(false);
-      };
-      audio.addEventListener('play', play);
-      audio.addEventListener('pause', pause);
-      audio.addEventListener('ended', ended);
-      return () => {
-        audio.removeEventListener('play', play);
-        audio.removeEventListener('pause', pause);
-        audio.removeEventListener('ended', ended);
-      };
-    }
-  }, [audioRef]);
 
   const handleAnswerChange = (index: number, value: string) => {
     const newAnswers = [...answers]
@@ -186,116 +195,73 @@ export default function ListeningExamPage() {
   }
 
   const generatePDF = async () => {
-    const { jsPDF } = await import("jspdf")
-    const doc = new jsPDF()
-    const pageWidth = doc.internal.pageSize.width
-    const margin = 20
-    const lineHeight = 7
-    let yPosition = margin
-    
-    // Helper function to add text with word wrapping
-    const addWrappedText = (text: string, x: number, y: number, maxWidth: number, fontSize = 12) => {
-      doc.setFontSize(fontSize)
-      const lines = doc.splitTextToSize(text, maxWidth)
-      doc.text(lines, x, y)
-      return y + lines.length * lineHeight
-    }
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const margin = 20;
+    const maxLineWidth = pageWidth - margin * 2;
+    const lineHeight = 7;
+    const pageHeight = doc.internal.pageSize.height;
+    const footerMargin = 20;
+    let yPosition = margin;
 
-
-    // Header
-    doc.setFontSize(20)
-    doc.setFont("helvetica", "bold")
-    doc.text("Listening Exam Submission", pageWidth / 2, yPosition, { align: "center" })
-    yPosition += 15
-
-
-    // Student Info
-    doc.setFontSize(12)
-    doc.setFont("helvetica", "normal")
-    yPosition = addWrappedText(`Student Name: ${examineeName}`, margin, yPosition, pageWidth - 2 * margin)
-    yPosition = addWrappedText(`Student ID: ${examineeId}`, margin, yPosition, pageWidth - 2 * margin)
-    yPosition = addWrappedText(`Exam Title: ${examData?.title}`, margin, yPosition, pageWidth - 2 * margin)
-    yPosition = addWrappedText(`Date: ${new Date().toLocaleDateString()}`, margin, yPosition, pageWidth - 2 * margin)
-    yPosition = addWrappedText(
-      `Time Spent: ${Math.floor((Date.now() - examStartTime) / 1000 / 60)} minutes`,
-      margin,
-      yPosition,
-      pageWidth - 2 * margin,
-    )
-    yPosition += 15
-
-
-    // Audio Info
-    doc.setFont("helvetica", "bold")
-    yPosition = addWrappedText("Audio File:", margin, yPosition, pageWidth - 2 * margin, 14)
-    yPosition += 5
-    doc.setFont("helvetica", "normal")
-    yPosition = addWrappedText(examData?.audio_url || "No audio file", margin, yPosition, pageWidth - 2 * margin)
-    yPosition += 15
-
-
-    // Questions and Answers
-    doc.setFont("helvetica", "bold")
-    yPosition = addWrappedText("Questions and Answers:", margin, yPosition, pageWidth - 2 * margin, 14)
-    yPosition += 10
-    examData?.questions.forEach((question: any, index: number) => {
-
-      if (yPosition > 250) {
-        doc.addPage()
-        yPosition = margin
+    const addTextWithPageBreaks = (text: string, isTitle: boolean = false) => {
+      if (isTitle) {
+        doc.setFont("helvetica", "bold").setFontSize(14);
+      } else {
+        doc.setFont("helvetica", "normal").setFontSize(12);
       }
+      const lines = doc.splitTextToSize(text, maxLineWidth);
+      lines.forEach((line: string) => {
+        if (yPosition > pageHeight - footerMargin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        doc.text(line, margin, yPosition);
+        yPosition += lineHeight;
+      });
+      yPosition += lineHeight / 2;
+    };
 
+    doc.setFontSize(20).setFont("helvetica", "bold");
+    doc.text("Listening Exam Submission", pageWidth / 2, yPosition, { align: "center" });
+    yPosition += 15;
 
-      // Question
-      doc.setFont("helvetica", "bold")
-      yPosition = addWrappedText(`Question ${index + 1}:`, margin, yPosition, pageWidth - 2 * margin)
-      yPosition += 5
-      doc.setFont("helvetica", "normal")
-      const questionText = question.text || question.question || `Question ${index + 1}`
-      yPosition = addWrappedText(questionText, margin, yPosition, pageWidth - 2 * margin)
-      yPosition += 10
+    addTextWithPageBreaks(`Student Name: ${examineeName}`);
+    addTextWithPageBreaks(`Student ID: ${examineeId}`);
+    addTextWithPageBreaks(`Exam Title: ${examData?.title}`);
+    yPosition += 10;
+    
+    addTextWithPageBreaks("Questions and Answers:", true);
 
+    (examData?.questions || []).forEach((question: any, index: number) => {
+      const questionText = `Question ${index + 1}: ${question.text || ''}`;
+      const answerText = `Answer: ${answers[index] || "No answer provided"}`;
+      
+      addTextWithPageBreaks(questionText, true);
+      addTextWithPageBreaks(answerText);
+      yPosition += lineHeight;
+    });
 
-      // Answer
-      doc.setFont("helvetica", "bold")
-      yPosition = addWrappedText("Answer:", margin, yPosition, pageWidth - 2 * margin)
-      yPosition += 5
-      doc.setFont("helvetica", "normal")
-      const answer = answers[index] || "No answer provided"
-      yPosition = addWrappedText(answer, margin, yPosition, pageWidth - 2 * margin)
-      yPosition += 15
-    })
-
-    return doc
+    return doc;
   }
 
   const handleSubmit = async () => {
     if (isSubmitting) return
-
     setIsSubmitting(true)
-
     try {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-
-      if (audioRef.current) {
-        audioRef.current.pause()
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (audioRef.current) audioRef.current.pause();
       
-      const examStartTime = Date.now(); // Define it here if not available globally
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
       const reader = new FileReader()
       reader.onload = async () => {
         const pdfDataUrl = reader.result as string
-
         const response = await fetch("/api/submit-exam", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             examType: "listening",
             examId: examData?.id,
@@ -306,49 +272,32 @@ export default function ListeningExamPage() {
             pdfData: pdfDataUrl,
             timeSpent: Math.floor((Date.now() - examStartTime) / 1000),
           }),
-        })
-
+        });
         const result = await response.json()
-
         if (result.success) {
-          toast({
-            title: "Exam submitted successfully",
-            description: `Your listening exam has been saved.`,
-          })
-
-          router.push("/examinee")
+          toast({ title: "Exam submitted successfully", description: `Your listening exam has been saved.` });
+          router.push("/examinee");
         } else {
-          throw new Error(result.error || "Submission failed")
+          throw new Error(result.error || "Submission failed");
         }
       }
-
-      reader.readAsDataURL(pdfBlob)
+      reader.readAsDataURL(pdfBlob);
     } catch (error) {
-      console.error("Error submitting exam:", error)
-      toast({
-        title: "Submission error",
-        description: "There was an error submitting your exam. Please try again.",
-        variant: "destructive",
-      })
-      setIsSubmitting(false)
+      console.error("Error submitting exam:", error);
+      toast({ title: "Submission error", description: "There was an error submitting your exam. Please try again.", variant: "destructive"});
+      setIsSubmitting(false);
     }
   }
 
   const handleAutoSubmit = () => {
-    toast({
-      title: "Time's up!",
-      description: "Your exam has been automatically submitted.",
-      variant: "destructive",
-    })
-    handleSubmit()
+    if (!isSubmitting) {
+        toast({ title: "Time's up!", description: "Your exam will be automatically submitted.", variant: "destructive" });
+        handleSubmit();
+    }
   }
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [])
 
   if (loading) {
@@ -357,7 +306,7 @@ export default function ListeningExamPage() {
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading exam from database...</p>
+            <p className="text-gray-600">Loading exam data...</p>
           </div>
         </div>
       </ProtectedRoute>
@@ -365,31 +314,30 @@ export default function ListeningExamPage() {
   }
 
   if (!examData) {
-    return (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <Headphones className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Not Found</h2>
-            <p className="text-gray-600">The requested exam could not be loaded.</p>
-            <Button onClick={() => router.push("/examinee/listening")} className="mt-4">
-              Back to Listening Exams
-            </Button>
-          </div>
-        </div>
-      </ProtectedRoute>
-    )
+     return (
+        <ProtectedRoute>
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+              <div className="text-center">
+                <Headphones className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Not Found</h2>
+                <p className="text-gray-600">The exam could not be loaded. Please try again.</p>
+                <Button onClick={() => router.push("/examinee/listening")} className="mt-4">
+                  Back to Listening Exams
+                </Button>
+              </div>
+            </div>
+        </ProtectedRoute>
+     )
   }
-
-  const progressPercentage = ((3600 - timeLeft) / 3600) * 100
-  const isTimeWarning = timeLeft < 600 // Less than 10 minutes
-  const answeredQuestions = answers.filter((answer) => answer.trim() !== "").length
+  
+  const progressPercentage = (totalDuration && timeLeft) ? ((totalDuration - timeLeft) / totalDuration) * 100 : 0;
+  const isTimeWarning = timeLeft !== null && timeLeft < 600;
+  const answeredQuestions = answers.filter((answer) => answer.trim() !== "").length;
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
-        <audio ref={audioRef} src={examData.audio_url} preload="auto" />
-
+        <audio ref={audioRef} src={examData?.audio_url} preload="metadata" />
         <header className="bg-white shadow-sm border-b sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
@@ -400,11 +348,10 @@ export default function ListeningExamPage() {
                   </div>
                   <div>
                     <h1 className="text-lg font-semibold text-gray-900">Listening Exam</h1>
-                    <p className="text-sm text-gray-600">{examData.title}</p>
+                    <p className="text-sm text-gray-600">{examData?.title}</p>
                   </div>
                 </div>
               </div>
-
               <div className="flex items-center gap-4">
                  <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-gray-500" />
@@ -413,7 +360,7 @@ export default function ListeningExamPage() {
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <CheckCircle className="w-4 h-4" />
                   <span>
-                    {answeredQuestions}/{examData.questions.length} answered
+                    {answeredQuestions}/{(examData?.questions || []).length} answered
                   </span>
                 </div>
                 <div
@@ -427,21 +374,11 @@ export default function ListeningExamPage() {
                 </Button>
               </div>
             </div>
-
             <div className="pb-4">
               <Progress value={progressPercentage} className="h-2" />
             </div>
           </div>
         </header>
-
-        {isTimeWarning && (
-          <Alert className="mx-4 mt-4 border-red-200 bg-red-50">
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-700">
-              Warning: Less than 10 minutes remaining! Your exam will auto-submit when time expires.
-            </AlertDescription>
-          </Alert>
-        )}
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
@@ -457,27 +394,20 @@ export default function ListeningExamPage() {
                   <div className="w-32 h-32 bg-purple-100 rounded-full flex items-center justify-center mx-auto">
                     <Volume2 className="w-16 h-16 text-purple-600" />
                   </div>
-
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-gray-900">Listen to the audio</h3>
                     <p className="text-sm text-gray-600 max-w-md">
-                      Click the play button below to start the audio. Listen carefully and answer the questions.
+                      Click the play button below to start the audio. You can only play it once.
                     </p>
-                    {examData.text && (
-                      <div className="bg-blue-50 p-3 rounded-lg">
-                        <p className="text-sm text-blue-800">{examData.text}</p>
-                      </div>
-                    )}
                   </div>
-
                   <Button
                     onClick={handlePlayAudio}
-                    disabled={!examData.audio_url}
+                    disabled={audioPlayed}
                     size="lg"
                     className="flex items-center gap-2"
                   >
-                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                    {isPlaying ? "Pause Audio" : "Play Audio"}
+                    <Play className="w-5 h-5" />
+                    {audioPlayed ? "Audio Has Been Played" : "Play Audio"}
                   </Button>
                 </div>
               </CardContent>
@@ -485,11 +415,11 @@ export default function ListeningExamPage() {
 
             <Card className="flex flex-col">
               <CardHeader>
-                <CardTitle>Questions ({examData.questions.length})</CardTitle>
+                <CardTitle>Questions ({(examData?.questions || []).length})</CardTitle>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto">
                 <div className="space-y-6">
-                  {examData.questions.map((question: any, index: number) => (
+                  {(examData?.questions || []).map((question: any, index: number) => (
                     <div key={index} className="space-y-3">
                       <div className="flex items-start gap-3">
                         <div className="flex-shrink-0 w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center text-sm font-medium text-purple-600">
@@ -497,7 +427,7 @@ export default function ListeningExamPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
-                            {question.text || question.question || `Question ${index + 1}`}
+                            {question.text || `Question ${index + 1}`}
                           </label>
                           <div className="relative">
                             <Textarea
@@ -507,10 +437,6 @@ export default function ListeningExamPage() {
                               onChange={(e) => handleAnswerChange(index, e.target.value)}
                               className="min-h-[100px] resize-none"
                             />
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="text-xs text-gray-500">{countWords(answers[index] || "")} words</span>
-                              {answers[index]?.trim() && <CheckCircle className="w-4 h-4 text-green-500" />}
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -520,7 +446,6 @@ export default function ListeningExamPage() {
               </CardContent>
             </Card>
           </div>
-
           <div className="mt-6 flex justify-center">
             <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="px-12">
               {isSubmitting ? "Submitting..." : "Submit Exam"}
