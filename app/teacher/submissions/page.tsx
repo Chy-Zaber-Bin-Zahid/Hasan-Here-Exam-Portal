@@ -1,25 +1,43 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowLeft, Loader2, Search, CalendarIcon, Trash2, Eye } from "lucide-react"
+import { ArrowLeft, Loader2, Search, CalendarIcon, Trash2, Eye, User } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+
+interface Submission {
+  id: number;
+  examinee_name: string;
+  examinee_id: string;
+  exam_title: string;
+  exam_type: 'reading' | 'writing' | 'listening';
+  submitted_at: string;
+  pdf_path: string;
+}
+
+interface GroupedSubmissions {
+  [key: string]: {
+    examinee_name: string;
+    submissions: Submission[];
+  }
+}
 
 export default function SubmissionsPage() {
   const { logout } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
   
-  const [submissions, setSubmissions] = useState<any[]>([])
+  const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [dateFilter, setDateFilter] = useState("all")
@@ -41,36 +59,54 @@ export default function SubmissionsPage() {
     fetchSubmissions()
   }, [toast])
 
-  const filteredSubmissions = submissions.filter((submission) => {
-    const searchTermLower = searchTerm.toLowerCase()
-    const matchesSearch = submission.examinee_name.toLowerCase().includes(searchTermLower) ||
-                          submission.examinee_id.toLowerCase().includes(searchTermLower) ||
-                          submission.exam_title.toLowerCase().includes(searchTermLower);
+  const groupedAndFilteredSubmissions = useMemo(() => {
+    const filtered = submissions.filter((submission) => {
+      const searchTermLower = searchTerm.toLowerCase()
+      const matchesSearch = submission.examinee_name.toLowerCase().includes(searchTermLower) ||
+                            submission.examinee_id.toLowerCase().includes(searchTermLower) ||
+                            submission.exam_title.toLowerCase().includes(searchTermLower);
 
-    if (dateFilter === "all") return matchesSearch;
-    
-    const submissionDate = new Date(submission.submitted_at)
-    const now = new Date()
-    let matchesDate = false;
+      if (dateFilter === "all") return matchesSearch;
+      
+      // FIX: Explicitly parse the database time string as UTC to prevent timezone errors.
+      // SQLite format is 'YYYY-MM-DD HH:MM:SS'. We convert it to ISO format 'YYYY-MM-DDTHH:MM:SSZ'.
+      const submissionDate = new Date(submission.submitted_at.replace(' ', 'T') + 'Z');
+      const now = new Date();
+      let matchesDate = false;
 
-    switch (dateFilter) {
-      case "today":
-        matchesDate = submissionDate.toDateString() === now.toDateString()
-        break
-      case "week":
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        matchesDate = submissionDate >= weekAgo
-        break
-      case "month":
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-        matchesDate = submissionDate >= monthAgo
-        break
-      default:
-        matchesDate = true;
-    }
+      switch (dateFilter) {
+        case "today":
+          matchesDate = submissionDate.getFullYear() === now.getFullYear() &&
+                        submissionDate.getMonth() === now.getMonth() &&
+                        submissionDate.getDate() === now.getDate();
+          break
+        case "week":
+          const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+          matchesDate = submissionDate >= weekAgo
+          break
+        case "month":
+           const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+          matchesDate = submissionDate >= monthAgo
+          break
+        default:
+          matchesDate = true;
+      }
+      return matchesSearch && matchesDate;
+    });
 
-    return matchesSearch && matchesDate;
-  })
+    return filtered.reduce<GroupedSubmissions>((acc, submission) => {
+        const key = submission.examinee_id;
+        if (!acc[key]) {
+            acc[key] = {
+                examinee_name: submission.examinee_name,
+                submissions: []
+            };
+        }
+        acc[key].submissions.push(submission);
+        return acc;
+    }, {});
+
+  }, [submissions, searchTerm, dateFilter]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -143,64 +179,77 @@ export default function SubmissionsPage() {
                   <span>Loading submissions...</span>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Examinee Name</TableHead>
-                      <TableHead>Examinee ID</TableHead>
-                      <TableHead>Exam Title</TableHead>
-                      <TableHead>Exam Type</TableHead>
-                      <TableHead>Submitted At</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredSubmissions.length > 0 ? filteredSubmissions.map(submission => (
-                      <TableRow key={submission.id}>
-                        <TableCell className="font-medium">{submission.examinee_name}</TableCell>
-                        <TableCell>{submission.examinee_id}</TableCell>
-                        <TableCell>{submission.exam_title}</TableCell>
-                        <TableCell>
-                            <Badge variant={getBadgeVariant(submission.exam_type)} className="capitalize">
-                                {submission.exam_type}
-                            </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(submission.submitted_at).toLocaleString()}</TableCell>
-                        <TableCell className="text-right">
-                          {/* FIX: Corrected the href for viewing PDFs */}
-                          <Button asChild variant="ghost" size="sm">
-                            <a href={`/api/files/pdf/${submission.pdf_path.replace('storage/', '')}`} target="_blank" rel="noopener noreferrer">
-                              <Eye className="w-4 h-4" />
-                            </a>
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700">
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This action cannot be undone. This will permanently delete the submission and its associated files.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(submission.id)}>Delete</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </TableCell>
-                      </TableRow>
-                    )) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center">No submissions found.</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                <Accordion type="single" collapsible className="w-full">
+                  {Object.keys(groupedAndFilteredSubmissions).length > 0 ? (
+                    Object.entries(groupedAndFilteredSubmissions).map(([examineeId, group]) => (
+                      <AccordionItem value={examineeId} key={examineeId}>
+                        <AccordionTrigger>
+                          <div className="flex items-center gap-2">
+                            <User className="h-5 w-5 text-gray-600" />
+                            <span className="font-semibold">{group.examinee_name}</span>
+                            <span className="text-gray-500">(ID: {examineeId})</span>
+                            <Badge variant="outline">{group.submissions.length} submission(s)</Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Exam Title</TableHead>
+                                <TableHead>Exam Type</TableHead>
+                                <TableHead>Submitted At</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {group.submissions.map(submission => (
+                                <TableRow key={submission.id}>
+                                  <TableCell>{submission.exam_title}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={getBadgeVariant(submission.exam_type)} className="capitalize">
+                                      {submission.exam_type}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>{new Date(submission.submitted_at).toLocaleString()}</TableCell>
+                                  <TableCell className="text-right">
+                                    <Button asChild variant="ghost" size="icon">
+                                      <a href={`/api/files/pdf/${submission.pdf_path.replace('storage/', '')}`} target="_blank" rel="noopener noreferrer" title="View PDF">
+                                        <Eye className="w-4 h-4" />
+                                      </a>
+                                    </Button>
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700" title="Delete Submission">
+                                          <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            This action cannot be undone. This will permanently delete the submission and its associated files.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => handleDelete(submission.id)}>Delete</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      No submissions found matching your criteria.
+                    </div>
+                  )}
+                </Accordion>
               )}
             </CardContent>
           </Card>

@@ -37,7 +37,7 @@ export default function TeacherPage() {
             <p className="text-gray-600">Create new questions or manage existing ones</p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             <Card className="hover:shadow-lg transition-shadow cursor-pointer">
               <CardHeader className="text-center">
                 <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
