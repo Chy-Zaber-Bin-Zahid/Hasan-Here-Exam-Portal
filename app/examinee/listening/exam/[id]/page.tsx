@@ -382,7 +382,7 @@ export default function ListeningExamPage() {
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
-            <Card className="flex flex-col">
+            <Card className="flex flex-col overflow-y-auto">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Headphones className="w-5 h-5 text-purple-600" />
@@ -400,20 +400,21 @@ export default function ListeningExamPage() {
                       Click the play button below to start the audio. You can only play it once.
                     </p>
                   </div>
-                  <Button
-                    onClick={handlePlayAudio}
-                    disabled={audioPlayed}
-                    size="lg"
-                    className="flex items-center gap-2"
-                  >
-                    <Play className="w-5 h-5" />
-                    {audioPlayed ? "Audio Has Been Played" : "Play Audio"}
-                  </Button>
+                  <div>
+                    <Button
+                      onClick={handlePlayAudio}
+                      disabled={audioPlayed || !examData?.audio_url}
+                      className="w-fit"
+                      size="lg"
+                    >
+                      {audioPlayed ? "Audio Played" : "Play Audio"}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="flex flex-col">
+            <Card className="flex flex-col overflow-y-auto">
               <CardHeader>
                 <CardTitle>Questions ({(examData?.questions || []).length})</CardTitle>
               </CardHeader>

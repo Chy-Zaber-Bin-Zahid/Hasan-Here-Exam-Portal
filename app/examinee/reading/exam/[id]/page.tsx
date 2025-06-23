@@ -401,7 +401,7 @@ export default function ReadingExamPage() {
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
-            <Card className="flex flex-col">
+            <Card className="flex flex-col overflow-y-auto">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-green-600" />
@@ -417,7 +417,7 @@ export default function ReadingExamPage() {
               </CardContent>
             </Card>
 
-            <Card className="flex flex-col">
+            <Card className="flex flex-col overflow-y-auto">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg">Questions ({totalQuestions})</CardTitle>
               </CardHeader>
