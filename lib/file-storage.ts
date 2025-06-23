@@ -1,5 +1,5 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "fs"
-import { join } from "path"
+import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, rmdirSync } from "fs"
+import { join, dirname } from "path"
 import { randomUUID } from "crypto"
 
 // Base storage directory
@@ -125,6 +125,37 @@ export function getPDFFile(
   } catch (error) {
     console.error("Error reading PDF file:", error)
     return null
+  }
+}
+
+export function deleteSubmissionAndCleanUp(pdfPath: string): boolean {
+  try {
+    // pdfPath from DB is relative, e.g., 'storage/name_id/examType/filename.pdf'
+    const fullPath = join(process.cwd(), pdfPath);
+
+    if (existsSync(fullPath)) {
+      // 1. Delete the PDF file
+      unlinkSync(fullPath);
+      console.log(`🗑️ Deleted submission PDF: ${fullPath}`);
+
+      // 2. Try to clean up empty parent directories
+      const examTypeDir = dirname(fullPath);
+      if (readdirSync(examTypeDir).length === 0) {
+        rmdirSync(examTypeDir);
+        console.log(`🗑️ Deleted empty exam type directory: ${examTypeDir}`);
+
+        const examineeDir = dirname(examTypeDir);
+        if (readdirSync(examineeDir).length === 0) {
+          rmdirSync(examineeDir);
+          console.log(`🗑️ Deleted empty examinee directory: ${examineeDir}`);
+        }
+      }
+      return true;
+    }
+    return false; // File did not exist
+  } catch (error) {
+    console.error("❌ Error deleting submission and cleaning up:", error);
+    return false;
   }
 }
 

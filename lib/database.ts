@@ -367,3 +367,9 @@ export function getExamSubmissions(): ExamSubmission[] {
   const db = getDatabase()
   return db.prepare("SELECT * FROM exam_submissions ORDER BY submitted_at DESC").all() as ExamSubmission[]
 }
+
+export function deleteExamSubmission(id: number): boolean {
+  const db = getDatabase()
+  const result = db.prepare("DELETE FROM exam_submissions WHERE id = ?").run(id)
+  return result.changes > 0
+}

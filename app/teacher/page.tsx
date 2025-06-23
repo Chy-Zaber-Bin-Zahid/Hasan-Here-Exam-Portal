@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Plus, Settings } from "lucide-react"
+import { ArrowLeft, FileCheck, Plus, Settings } from "lucide-react"
 
 export default function TeacherPage() {
   const { logout } = useAuth()
@@ -64,6 +64,21 @@ export default function TeacherPage() {
               <CardContent>
                 <Button className="w-full" variant="outline" onClick={() => router.push("/teacher/manage")}>
                   Manage Questions
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/teacher/submissions")}>
+              <CardHeader className="text-center">
+                <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+                  <FileCheck className="w-8 h-8 text-purple-600" />
+                </div>
+                <CardTitle className="text-xl">View Submissions</CardTitle>
+                <CardDescription>Review and manage examinee exam submissions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" variant="secondary">
+                  View Submissions
                 </Button>
               </CardContent>
             </Card>
