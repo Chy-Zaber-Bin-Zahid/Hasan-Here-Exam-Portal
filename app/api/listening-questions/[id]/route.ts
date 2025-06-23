@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getListeningQuestion, updateListeningQuestion, deleteListeningQuestion } from "@/lib/database"
+import { deleteAudioFile } from "@/lib/file-storage"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -28,7 +29,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     console.log("📝 Updating listening question ID:", id)
 
-    const success = updateListeningQuestion(id, title, audio_url, text || "", questions)
+    // Ensure questions are stringified before updating
+    const questionsString = typeof questions === 'string' ? questions : JSON.stringify(questions);
+
+    const success = updateListeningQuestion(id, title, audio_url, text || "", questionsString)
 
     if (!success) {
       return NextResponse.json({ error: "Question not found or update failed" }, { status: 404 })
@@ -52,20 +56,36 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     console.log("🗑️ Deleting listening question ID:", id)
 
+    // FIX: Get question details to find the audio file before deleting the DB record
+    const questionToDelete = getListeningQuestion(id);
+
+    if (!questionToDelete) {
+        return NextResponse.json({ error: "Question not found" }, { status: 404 });
+    }
+
+    // Delete the associated audio file
+    if (questionToDelete.audio_url) {
+        const filename = questionToDelete.audio_url.split('/').pop();
+        if (filename) {
+            deleteAudioFile(filename);
+        }
+    }
+
+    // Now delete the database record
     const success = deleteListeningQuestion(id)
 
     if (!success) {
       return NextResponse.json({ error: "Question not found or delete failed" }, { status: 404 })
     }
 
-    console.log("✅ Listening question deleted successfully")
+    console.log("✅ Reading question deleted successfully")
 
     return NextResponse.json({
       success: true,
-      message: "Listening question deleted successfully",
+      message: "Reading question deleted successfully",
     })
   } catch (error) {
-    console.error("Error deleting listening question:", error)
+    console.error("Error deleting reading question:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

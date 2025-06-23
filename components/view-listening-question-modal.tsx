@@ -31,12 +31,6 @@ export function ViewListeningQuestionModal({ question, open, onOpenChange }: Vie
     parsedQuestions = []
   }
 
-  console.log("📋 Viewing listening question:", {
-    title: question.title,
-    questionsType: typeof question.questions,
-    parsedCount: parsedQuestions.length,
-  })
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -51,12 +45,20 @@ export function ViewListeningQuestionModal({ question, open, onOpenChange }: Vie
               <CardTitle className="text-lg">Audio File</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm">
-                  <strong>Audio URL:</strong> {question.audio_url || "No audio file"}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                <p className="text-sm font-medium">
+                  Filename: {question.audioFileName || question.audio_url?.split('/').pop() || "No audio file"}
                 </p>
+                {/* FIX: Added an audio player */}
+                {question.audio_url ? (
+                  <audio controls src={question.audio_url} className="w-full">
+                    Your browser does not support the audio element.
+                  </audio>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No audio attached.</p>
+                )}
                 {question.text && (
-                  <p className="text-sm mt-2">
+                  <p className="text-sm mt-2 pt-3 border-t">
                     <strong>Description:</strong> {question.text}
                   </p>
                 )}
@@ -77,20 +79,6 @@ export function ViewListeningQuestionModal({ question, open, onOpenChange }: Vie
                         <span className="font-medium">{index + 1}.</span>{" "}
                         {q.text || q.question || `Question ${index + 1}`}
                       </p>
-                      {q.options && Array.isArray(q.options) && (
-                        <div className="mt-2 ml-4 space-y-1">
-                          {q.options.map((option: string, optIndex: number) => (
-                            <p key={optIndex} className="text-xs text-gray-600">
-                              {String.fromCharCode(65 + optIndex)}. {option}
-                            </p>
-                          ))}
-                          {typeof q.correctAnswer === "number" && (
-                            <p className="text-xs text-green-600 font-medium mt-1">
-                              Correct: {String.fromCharCode(65 + q.correctAnswer)}
-                            </p>
-                          )}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>

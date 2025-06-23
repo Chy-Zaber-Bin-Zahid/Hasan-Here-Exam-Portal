@@ -48,25 +48,41 @@ export function EditReadingQuestionModal({ question, open, onOpenChange, onSave 
 
   useEffect(() => {
     if (question) {
+      // FIX: Parse the questions from the JSON string before resetting the form
+      let parsedQuestions = []
+      try {
+        if (typeof question.questions === "string") {
+          parsedQuestions = JSON.parse(question.questions)
+        } else if (Array.isArray(question.questions)) {
+          parsedQuestions = question.questions
+        }
+      } catch (error) {
+        console.error("Error parsing reading questions for edit:", error)
+        parsedQuestions = []
+      }
+
       reset({
         title: question.title,
         passage: question.passage,
-        questions: question.questions.length > 0 ? question.questions : [{ text: "" }],
+        questions: parsedQuestions.length > 0 ? parsedQuestions : [{ text: "" }],
       })
     }
-  }, [question, reset])
+  }, [question, reset, open]) // Added 'open' to dependency array to ensure reset on reopen
 
   const onSubmit = (data: ReadingForm) => {
     const validQuestions = data.questions.filter((q) => q.text.trim() !== "")
 
     if (validQuestions.length === 0) {
+      // You might want to add a toast message here for user feedback
       return
     }
 
     const updatedQuestion = {
       ...question,
-      ...data,
-      questions: validQuestions,
+      title: data.title,
+      passage: data.passage,
+      // FIX: Stringify the questions array before passing it to the save handler
+      questions: JSON.stringify(validQuestions),
       updatedAt: new Date().toISOString(),
     }
 

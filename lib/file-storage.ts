@@ -1,4 +1,4 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs"
+import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync } from "fs"
 import { join } from "path"
 import { randomUUID } from "crypto"
 
@@ -67,6 +67,25 @@ export function getAudioFile(filename: string): Buffer | null {
     return null
   }
 }
+
+// FIX: Add function to delete an audio file
+export function deleteAudioFile(filename: string): boolean {
+  try {
+    const audioDir = join(STORAGE_DIR, "teacher_audio_uploads");
+    const filePath = join(audioDir, filename);
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+      console.log(`🗑️ Deleted audio file: ${filePath}`);
+      return true;
+    }
+    console.log(`⚠️ Audio file not found for deletion: ${filePath}`);
+    return false; // File did not exist
+  } catch (error) {
+    console.error("❌ Error deleting audio file:", error);
+    return false;
+  }
+}
+
 
 // PDF file storage in examinee's exam type folder
 export function savePDFFile(

@@ -13,6 +13,20 @@ interface ViewReadingQuestionModalProps {
 export function ViewReadingQuestionModal({ question, open, onOpenChange }: ViewReadingQuestionModalProps) {
   if (!question) return null
 
+  // FIX: Parse the questions from the JSON string before rendering
+  let parsedQuestions = []
+  try {
+    if (typeof question.questions === "string") {
+      parsedQuestions = JSON.parse(question.questions)
+    } else if (Array.isArray(question.questions)) {
+      // If it's already an array, use it directly
+      parsedQuestions = question.questions
+    }
+  } catch (error) {
+    console.error("Error parsing reading questions:", error)
+    parsedQuestions = []
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -37,11 +51,11 @@ export function ViewReadingQuestionModal({ question, open, onOpenChange }: ViewR
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Questions ({question.questions.length})</CardTitle>
+              <CardTitle className="text-lg">Questions ({parsedQuestions.length})</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {question.questions.map((q: any, index: number) => (
+                {parsedQuestions.map((q: any, index: number) => (
                   <div key={index} className="bg-gray-50 p-3 rounded-lg">
                     <p className="text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere">
                       <span className="font-medium">{index + 1}.</span> {q.text}
@@ -53,7 +67,7 @@ export function ViewReadingQuestionModal({ question, open, onOpenChange }: ViewR
           </Card>
 
           <div className="text-xs text-gray-500 space-y-1">
-            <p>Created: {new Date(question.createdAt).toLocaleString()}</p>
+            <p>Created: {new Date(question.created_at).toLocaleString()}</p>
             {question.updatedAt && <p>Last updated: {new Date(question.updatedAt).toLocaleString()}</p>}
           </div>
 

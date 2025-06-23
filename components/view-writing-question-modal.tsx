@@ -49,7 +49,8 @@ export function ViewWritingQuestionModal({ question, open, onOpenChange }: ViewW
           </Card>
 
           <div className="text-xs text-gray-500 space-y-1">
-            <p>Created: {new Date(question.createdAt).toLocaleString()}</p>
+            {/* FIX: Changed 'question.createdAt' to 'question.created_at' to match the database property */}
+            <p>Created: {question.created_at ? new Date(question.created_at).toLocaleString() : "Date not available"}</p>
             {question.updatedAt && <p>Last updated: {new Date(question.updatedAt).toLocaleString()}</p>}
           </div>
 
