@@ -41,28 +41,23 @@ export default function ReadingExamPage() {
     setExamineeName(name)
     setExamineeId(id)
 
-    // Load exam data from database
-    loadExamFromDatabase(examId as string)
+    if (examId) {
+        loadExamFromDatabase(examId as string)
+    }
   }, [params.id, router])
 
+  // FIX: Updated data fetching logic to get a single exam by ID
   const loadExamFromDatabase = async (examId: string) => {
     try {
       console.log("🔍 Loading reading exam from database, ID:", examId)
 
-      const response = await fetch("/api/reading-questions")
-      const data = await response.json()
-
-      console.log("📚 Database response:", data)
-
-      // Handle different response formats
-      let questions = []
-      if (data.success && Array.isArray(data.questions)) {
-        questions = data.questions
-      } else if (Array.isArray(data)) {
-        questions = data
+      const response = await fetch(`/api/reading-questions/${examId}`)
+      if (!response.ok) {
+          throw new Error(`Exam not found or failed to load. Status: ${response.status}`)
       }
-
-      const currentExam = questions.find((q: any) => q.id.toString() === examId)
+      
+      const data = await response.json()
+      const currentExam = data.question
 
       if (!currentExam) {
         toast({
@@ -74,7 +69,6 @@ export default function ReadingExamPage() {
         return
       }
 
-      // Parse questions if they're stored as JSON string
       let parsedQuestions = []
       try {
         if (typeof currentExam.questions === "string") {
@@ -84,7 +78,6 @@ export default function ReadingExamPage() {
         }
       } catch (error) {
         console.error("Error parsing questions:", error)
-        parsedQuestions = []
       }
 
       const examWithParsedQuestions = {
@@ -92,22 +85,14 @@ export default function ReadingExamPage() {
         questions: parsedQuestions,
       }
 
-      console.log("✅ Exam loaded:", {
-        title: examWithParsedQuestions.title,
-        questionsCount: parsedQuestions.length,
-        passage: examWithParsedQuestions.passage ? "Present" : "Missing",
-      })
-
       setExamData(examWithParsedQuestions)
 
-      // Initialize answers object
       const initialAnswers: { [key: number]: string } = {}
       parsedQuestions.forEach((_: any, index: number) => {
         initialAnswers[index] = ""
       })
       setAnswers(initialAnswers)
 
-      // Start timer
       startTimer()
       setLoading(false)
     } catch (error) {
@@ -155,7 +140,6 @@ export default function ReadingExamPage() {
   }
 
   const generatePDF = async () => {
-    // Import jsPDF dynamically
     const { jsPDF } = await import("jspdf")
 
     const doc = new jsPDF()
@@ -164,13 +148,11 @@ export default function ReadingExamPage() {
     const lineHeight = 7
     let yPosition = margin
 
-    // Header
     doc.setFontSize(16)
     doc.setFont("helvetica", "bold")
     doc.text("Reading Exam Results", margin, yPosition)
     yPosition += lineHeight * 2
 
-    // Student Info
     doc.setFontSize(12)
     doc.setFont("helvetica", "normal")
     doc.text(`Student Name: ${examineeName}`, margin, yPosition)
@@ -182,17 +164,14 @@ export default function ReadingExamPage() {
     doc.text(`Submission Date: ${new Date().toLocaleString()}`, margin, yPosition)
     yPosition += lineHeight * 2
 
-    // Passage
     doc.setFont("helvetica", "bold")
     doc.text("Reading Passage:", margin, yPosition)
     yPosition += lineHeight
     doc.setFont("helvetica", "normal")
 
-    // Split passage into lines that fit the page width
     const passageLines = doc.splitTextToSize(examData.passage, pageWidth - 2 * margin)
     passageLines.forEach((line: string) => {
       if (yPosition > 270) {
-        // Check if we need a new page
         doc.addPage()
         yPosition = margin
       }
@@ -201,19 +180,16 @@ export default function ReadingExamPage() {
     })
     yPosition += lineHeight
 
-    // Questions and Answers
     doc.setFont("helvetica", "bold")
     doc.text("Questions and Answers:", margin, yPosition)
     yPosition += lineHeight * 1.5
 
     examData.questions.forEach((question: any, index: number) => {
       if (yPosition > 250) {
-        // Check if we need a new page
         doc.addPage()
         yPosition = margin
       }
 
-      // Question
       doc.setFont("helvetica", "bold")
       doc.text(`Question ${index + 1}:`, margin, yPosition)
       yPosition += lineHeight
@@ -231,7 +207,6 @@ export default function ReadingExamPage() {
       })
       yPosition += lineHeight * 0.5
 
-      // Answer
       doc.setFont("helvetica", "bold")
       doc.text("Answer:", margin, yPosition)
       yPosition += lineHeight
@@ -259,21 +234,17 @@ export default function ReadingExamPage() {
     setIsSubmitting(true)
 
     try {
-      // Stop timer
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
 
-      // Generate PDF
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
-      // Create PDF data URL for storage
       const reader = new FileReader()
       reader.onload = async () => {
         const pdfDataUrl = reader.result as string
 
-        // Submit to API
         const response = await fetch("/api/submit-exam", {
           method: "POST",
           headers: {
@@ -296,10 +267,9 @@ export default function ReadingExamPage() {
         if (result.success) {
           toast({
             title: "Exam submitted successfully",
-            description: `Your reading exam has been saved to: ${result.folderPath}`,
+            description: `Your reading exam has been saved.`,
           })
 
-          // Navigate back to examinee dashboard
           router.push("/examinee")
         } else {
           throw new Error(result.error || "Submission failed")
@@ -327,7 +297,6 @@ export default function ReadingExamPage() {
     handleSubmit()
   }
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) {
@@ -375,7 +344,6 @@ export default function ReadingExamPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
-        {/* Header */}
         <header className="bg-white shadow-sm border-b sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
@@ -422,7 +390,6 @@ export default function ReadingExamPage() {
           </div>
         </header>
 
-        {/* Time Warning */}
         {isTimeWarning && (
           <Alert className="mx-4 mt-4 border-red-200 bg-red-50">
             <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -432,10 +399,8 @@ export default function ReadingExamPage() {
           </Alert>
         )}
 
-        {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
-            {/* Left Panel - Reading Passage */}
             <Card className="flex flex-col">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -452,7 +417,6 @@ export default function ReadingExamPage() {
               </CardContent>
             </Card>
 
-            {/* Right Panel - Questions */}
             <Card className="flex flex-col">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg">Questions ({totalQuestions})</CardTitle>
@@ -491,7 +455,6 @@ export default function ReadingExamPage() {
             </Card>
           </div>
 
-          {/* Submit Button - Bottom Center */}
           <div className="mt-6 flex justify-center">
             <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="px-12">
               {isSubmitting ? "Submitting..." : "Submit Exam"}

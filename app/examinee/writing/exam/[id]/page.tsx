@@ -30,7 +30,7 @@ export default function WritingExamPage() {
 
   const [examData, setExamData] = useState<WritingQuestion | null>(null)
   const [answer, setAnswer] = useState("")
-  const [timeLeft, setTimeLeft] = useState(3600) // 60 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(3600)
   const [examStartTime] = useState(Date.now())
   const [examineeName, setExamineeName] = useState("")
   const [examineeId, setExamineeId] = useState("")
@@ -50,28 +50,20 @@ export default function WritingExamPage() {
     setExamineeName(name)
     setExamineeId(id)
 
-    // Load exam data from database
-    loadExamFromDatabase(examId)
+    if (examId) {
+      loadExamFromDatabase(examId)
+    }
   }, [examId, router])
 
   const loadExamFromDatabase = async (examId: string) => {
     try {
-      console.log("🔍 Loading writing exam from database, ID:", examId)
-
-      const response = await fetch("/api/writing-questions")
-      const data = await response.json()
-
-      console.log("✍️ Database response:", data)
-
-      // Handle different response formats
-      let questions = []
-      if (data.success && Array.isArray(data.questions)) {
-        questions = data.questions
-      } else if (Array.isArray(data)) {
-        questions = data
+      const response = await fetch(`/api/writing-questions/${examId}`)
+      if (!response.ok) {
+        throw new Error(`Exam not found or failed to load. Status: ${response.status}`)
       }
-
-      const question = questions.find((q: WritingQuestion) => q.id.toString() === examId)
+      
+      const data = await response.json()
+      const question = data.question;
 
       if (!question) {
         toast({
@@ -83,15 +75,7 @@ export default function WritingExamPage() {
         return
       }
 
-      console.log("✅ Writing exam loaded:", {
-        title: question.title,
-        prompt: question.prompt ? "Present" : "Missing",
-        instructions: question.instructions ? "Present" : "Missing",
-      })
-
       setExamData(question)
-
-      // Start timer
       startTimer()
       setLoading(false)
     } catch (error) {
@@ -131,75 +115,73 @@ export default function WritingExamPage() {
       .filter((word) => word.length > 0).length
   }
 
+  // FIX: Rewrote the PDF generation logic to handle multi-page content correctly.
   const generatePDF = async () => {
-    const { jsPDF } = await import("jspdf")
-    const doc = new jsPDF()
-    const pageWidth = doc.internal.pageSize.width
-    const margin = 20
-    const lineHeight = 7
-    let yPosition = margin
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    const margin = 20;
+    const maxLineWidth = pageWidth - margin * 2;
+    const lineHeight = 7;
+    const pageHeight = doc.internal.pageSize.height;
+    const footerMargin = 20;
+    let yPosition = margin;
 
-    // Helper function to add text with word wrapping
-    const addWrappedText = (text: string, x: number, y: number, maxWidth: number, fontSize = 12) => {
-      doc.setFontSize(fontSize)
-      const lines = doc.splitTextToSize(text, maxWidth)
-      doc.text(lines, x, y)
-      return y + lines.length * lineHeight
-    }
+    // Helper function to add text and handle page breaks
+    const addTextWithPageBreaks = (text: string, isTitle: boolean = false) => {
+      if (isTitle) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(12);
+      }
+
+      const lines = doc.splitTextToSize(text, maxLineWidth);
+      lines.forEach((line: string) => {
+        if (yPosition > pageHeight - footerMargin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        doc.text(line, margin, yPosition);
+        yPosition += lineHeight;
+      });
+
+      yPosition += (lineHeight / 2); // Add a little space after the block
+    };
 
     // Header
-    doc.setFontSize(20)
-    doc.setFont("helvetica", "bold")
-    doc.text("Writing Exam Submission", pageWidth / 2, yPosition, { align: "center" })
-    yPosition += 15
+    doc.setFontSize(20).setFont("helvetica", "bold");
+    doc.text("Writing Exam Submission", pageWidth / 2, yPosition, { align: "center" });
+    yPosition += 15;
 
     // Student Info
-    doc.setFontSize(12)
-    doc.setFont("helvetica", "normal")
-    yPosition = addWrappedText(`Student Name: ${examineeName}`, margin, yPosition, pageWidth - 2 * margin)
-    yPosition = addWrappedText(`Student ID: ${examineeId}`, margin, yPosition, pageWidth - 2 * margin)
-    yPosition = addWrappedText(`Exam Title: ${examData?.title}`, margin, yPosition, pageWidth - 2 * margin)
-    yPosition = addWrappedText(`Date: ${new Date().toLocaleDateString()}`, margin, yPosition, pageWidth - 2 * margin)
-    yPosition = addWrappedText(
-      `Time Spent: ${Math.floor((Date.now() - examStartTime) / 1000 / 60)} minutes`,
-      margin,
-      yPosition,
-      pageWidth - 2 * margin,
-    )
-    yPosition += 10
-
+    doc.setFontSize(12).setFont("helvetica", "normal");
+    addTextWithPageBreaks(`Student Name: ${examineeName}`);
+    addTextWithPageBreaks(`Student ID: ${examineeId}`);
+    addTextWithPageBreaks(`Exam Title: ${examData?.title}`);
+    addTextWithPageBreaks(`Date: ${new Date().toLocaleDateString()}`);
+    yPosition += 10;
+    
     // Prompt
-    doc.setFont("helvetica", "bold")
-    yPosition = addWrappedText("Writing Prompt:", margin, yPosition, pageWidth - 2 * margin, 14)
-    yPosition += 5
-    doc.setFont("helvetica", "normal")
-    yPosition = addWrappedText(examData?.prompt || "", margin, yPosition, pageWidth - 2 * margin)
-    yPosition += 10
+    addTextWithPageBreaks("Writing Prompt:", true);
+    addTextWithPageBreaks(examData?.prompt || "");
+    yPosition += 5;
 
     // Instructions
     if (examData?.instructions) {
-      doc.setFont("helvetica", "bold")
-      yPosition = addWrappedText("Instructions:", margin, yPosition, pageWidth - 2 * margin, 14)
-      yPosition += 5
-      doc.setFont("helvetica", "normal")
-      yPosition = addWrappedText(examData.instructions, margin, yPosition, pageWidth - 2 * margin)
-      yPosition += 15
+      addTextWithPageBreaks("Instructions:", true);
+      addTextWithPageBreaks(examData.instructions);
+      yPosition += 5;
     }
 
     // Answer
-    doc.setFont("helvetica", "bold")
-    yPosition = addWrappedText("Student Answer:", margin, yPosition, pageWidth - 2 * margin, 14)
-    yPosition += 5
-    doc.setFont("helvetica", "normal")
+    addTextWithPageBreaks("Student Answer:", true);
+    const studentAnswer = answer.trim() ? answer : "No answer provided.";
+    addTextWithPageBreaks(studentAnswer);
 
-    if (answer.trim()) {
-      yPosition = addWrappedText(answer, margin, yPosition, pageWidth - 2 * margin)
-    } else {
-      yPosition = addWrappedText("No answer provided.", margin, yPosition, pageWidth - 2 * margin)
-    }
-
-    return doc
-  }
+    return doc;
+  };
 
   const handleSubmit = async () => {
     if (isSubmitting) return
@@ -207,26 +189,20 @@ export default function WritingExamPage() {
     setIsSubmitting(true)
 
     try {
-      // Stop timer
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
 
-      // Generate PDF
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
-      // Create PDF data URL for storage
       const reader = new FileReader()
       reader.onload = async () => {
         const pdfDataUrl = reader.result as string
 
-        // Submit to API
         const response = await fetch("/api/submit-exam", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             examType: "writing",
             examId: examData?.id,
@@ -244,10 +220,8 @@ export default function WritingExamPage() {
         if (result.success) {
           toast({
             title: "Exam submitted successfully",
-            description: `Your writing exam has been saved to: ${result.folderPath}`,
+            description: `Your writing exam has been saved.`,
           })
-
-          // Navigate back to examinee dashboard
           router.push("/examinee")
         } else {
           throw new Error(result.error || "Submission failed")
@@ -275,7 +249,6 @@ export default function WritingExamPage() {
     handleSubmit()
   }
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) {
@@ -315,13 +288,12 @@ export default function WritingExamPage() {
   }
 
   const progressPercentage = ((3600 - timeLeft) / 3600) * 100
-  const isTimeWarning = timeLeft < 600 // Less than 10 minutes
+  const isTimeWarning = timeLeft < 600
   const wordCount = countWords(answer)
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
-        {/* Header */}
         <header className="bg-white shadow-sm border-b sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
@@ -365,7 +337,6 @@ export default function WritingExamPage() {
           </div>
         </header>
 
-        {/* Time Warning */}
         {isTimeWarning && (
           <Alert className="mx-4 mt-4 border-red-200 bg-red-50">
             <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -375,10 +346,8 @@ export default function WritingExamPage() {
           </Alert>
         )}
 
-        {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
-            {/* Left Panel - Prompt and Instructions */}
             <Card className="flex flex-col">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -420,7 +389,6 @@ export default function WritingExamPage() {
               </CardContent>
             </Card>
 
-            {/* Right Panel - Answer Area */}
             <Card className="flex flex-col">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
@@ -458,7 +426,6 @@ export default function WritingExamPage() {
             </Card>
           </div>
 
-          {/* Submit Button - Bottom Center */}
           <div className="mt-6 flex justify-center">
             <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="px-12">
               {isSubmitting ? "Submitting..." : "Submit Exam"}

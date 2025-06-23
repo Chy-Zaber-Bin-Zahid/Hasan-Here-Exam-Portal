@@ -54,28 +54,24 @@ export default function ListeningExamPage() {
     setExamineeName(name)
     setExamineeId(id)
 
-    // Load exam data from database
-    loadExamFromDatabase(examId)
+    if (examId) {
+        loadExamFromDatabase(examId)
+    }
   }, [examId, router])
 
+  // FIX: Updated data fetching logic to get a single exam by ID
   const loadExamFromDatabase = async (examId: string) => {
     try {
       console.log("🔍 Loading listening exam from database, ID:", examId)
 
-      const response = await fetch("/api/listening-questions")
-      const data = await response.json()
-
-      console.log("🎧 Database response:", data)
-
-      // Handle different response formats
-      let questions = []
-      if (data.success && Array.isArray(data.questions)) {
-        questions = data.questions
-      } else if (Array.isArray(data)) {
-        questions = data
+      const response = await fetch(`/api/listening-questions/${examId}`)
+      if (!response.ok) {
+        throw new Error(`Exam not found or failed to load. Status: ${response.status}`)
       }
 
-      const question = questions.find((q: ListeningQuestion) => q.id.toString() === examId)
+      const data = await response.json();
+      const question = data.question;
+
 
       if (!question) {
         toast({
@@ -87,7 +83,6 @@ export default function ListeningExamPage() {
         return
       }
 
-      // Parse questions if they're stored as JSON string
       let parsedQuestions = []
       try {
         if (typeof question.questions === "string") {
@@ -105,16 +100,9 @@ export default function ListeningExamPage() {
         questions: parsedQuestions,
       }
 
-      console.log("✅ Listening exam loaded:", {
-        title: examWithParsedQuestions.title,
-        questionsCount: parsedQuestions.length,
-        audioUrl: examWithParsedQuestions.audio_url ? "Present" : "Missing",
-      })
-
       setExamData(examWithParsedQuestions)
       setAnswers(new Array(parsedQuestions.length).fill(""))
 
-      // Start timer
       startTimer()
       setLoading(false)
     } catch (error) {
@@ -155,36 +143,41 @@ export default function ListeningExamPage() {
   }
 
   const handlePlayAudio = () => {
-    if (audioRef.current && examData?.audio_url) {
-      if (isPlaying) {
-        audioRef.current.pause()
-        setIsPlaying(false)
-      } else {
-        // Set the audio source to the correct path
-        const audioPath = examData.audio_url.startsWith("/")
-          ? examData.audio_url
-          : `/api/files/audio/${examData.audio_url}`
-
-        console.log("🎵 Playing audio from:", audioPath)
-
-        audioRef.current.src = audioPath
-        audioRef.current
-          .play()
-          .then(() => {
-            setAudioPlayed(true)
-            setIsPlaying(true)
-          })
-          .catch((error) => {
-            console.error("❌ Audio play error:", error)
-            toast({
-              title: "Audio Error",
-              description: "Could not play the audio file. Please check if the file exists.",
-              variant: "destructive",
-            })
-          })
-      }
+    if (audioRef.current) {
+        if (isPlaying) {
+            audioRef.current.pause();
+        } else {
+            audioRef.current.play().catch(error => {
+                console.error("❌ Audio play error:", error)
+                toast({
+                  title: "Audio Error",
+                  description: "Could not play the audio file.",
+                  variant: "destructive",
+                })
+            });
+        }
     }
   }
+  
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      const play = () => setIsPlaying(true);
+      const pause = () => setIsPlaying(false);
+      const ended = () => {
+        setAudioEnded(true);
+        setIsPlaying(false);
+      };
+      audio.addEventListener('play', play);
+      audio.addEventListener('pause', pause);
+      audio.addEventListener('ended', ended);
+      return () => {
+        audio.removeEventListener('play', play);
+        audio.removeEventListener('pause', pause);
+        audio.removeEventListener('ended', ended);
+      };
+    }
+  }, [audioRef]);
 
   const handleAnswerChange = (index: number, value: string) => {
     const newAnswers = [...answers]
@@ -199,7 +192,7 @@ export default function ListeningExamPage() {
     const margin = 20
     const lineHeight = 7
     let yPosition = margin
-
+    
     // Helper function to add text with word wrapping
     const addWrappedText = (text: string, x: number, y: number, maxWidth: number, fontSize = 12) => {
       doc.setFontSize(fontSize)
@@ -208,11 +201,13 @@ export default function ListeningExamPage() {
       return y + lines.length * lineHeight
     }
 
+
     // Header
     doc.setFontSize(20)
     doc.setFont("helvetica", "bold")
     doc.text("Listening Exam Submission", pageWidth / 2, yPosition, { align: "center" })
     yPosition += 15
+
 
     // Student Info
     doc.setFontSize(12)
@@ -229,6 +224,7 @@ export default function ListeningExamPage() {
     )
     yPosition += 15
 
+
     // Audio Info
     doc.setFont("helvetica", "bold")
     yPosition = addWrappedText("Audio File:", margin, yPosition, pageWidth - 2 * margin, 14)
@@ -237,16 +233,18 @@ export default function ListeningExamPage() {
     yPosition = addWrappedText(examData?.audio_url || "No audio file", margin, yPosition, pageWidth - 2 * margin)
     yPosition += 15
 
+
     // Questions and Answers
     doc.setFont("helvetica", "bold")
     yPosition = addWrappedText("Questions and Answers:", margin, yPosition, pageWidth - 2 * margin, 14)
     yPosition += 10
-
     examData?.questions.forEach((question: any, index: number) => {
+
       if (yPosition > 250) {
         doc.addPage()
         yPosition = margin
       }
+
 
       // Question
       doc.setFont("helvetica", "bold")
@@ -256,6 +254,7 @@ export default function ListeningExamPage() {
       const questionText = question.text || question.question || `Question ${index + 1}`
       yPosition = addWrappedText(questionText, margin, yPosition, pageWidth - 2 * margin)
       yPosition += 10
+
 
       // Answer
       doc.setFont("helvetica", "bold")
@@ -276,27 +275,22 @@ export default function ListeningExamPage() {
     setIsSubmitting(true)
 
     try {
-      // Stop timer
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
 
-      // Stop audio if playing
       if (audioRef.current) {
         audioRef.current.pause()
-        setIsPlaying(false)
       }
-
-      // Generate PDF
+      
+      const examStartTime = Date.now(); // Define it here if not available globally
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
-      // Create PDF data URL for storage
       const reader = new FileReader()
       reader.onload = async () => {
         const pdfDataUrl = reader.result as string
 
-        // Submit to API
         const response = await fetch("/api/submit-exam", {
           method: "POST",
           headers: {
@@ -319,10 +313,9 @@ export default function ListeningExamPage() {
         if (result.success) {
           toast({
             title: "Exam submitted successfully",
-            description: `Your listening exam has been saved to: ${result.folderPath}`,
+            description: `Your listening exam has been saved.`,
           })
 
-          // Navigate back to examinee dashboard
           router.push("/examinee")
         } else {
           throw new Error(result.error || "Submission failed")
@@ -350,14 +343,10 @@ export default function ListeningExamPage() {
     handleSubmit()
   }
 
-  // Cleanup timer and audio on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current)
-      }
-      if (audioRef.current) {
-        audioRef.current.pause()
       }
     }
   }, [])
@@ -399,26 +388,8 @@ export default function ListeningExamPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
-        {/* Hidden audio element */}
-        <audio
-          ref={audioRef}
-          onEnded={() => {
-            setAudioEnded(true)
-            setIsPlaying(false)
-          }}
-          onError={(e) => {
-            console.error("Audio error:", e)
-            toast({
-              title: "Audio Error",
-              description: "There was an error playing the audio file.",
-              variant: "destructive",
-            })
-            setIsPlaying(false)
-          }}
-          preload="metadata"
-        />
+        <audio ref={audioRef} src={examData.audio_url} preload="auto" />
 
-        {/* Header */}
         <header className="bg-white shadow-sm border-b sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
@@ -435,7 +406,7 @@ export default function ListeningExamPage() {
               </div>
 
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-gray-500" />
                   <span className="text-sm text-gray-600">{examineeName}</span>
                 </div>
@@ -463,7 +434,6 @@ export default function ListeningExamPage() {
           </div>
         </header>
 
-        {/* Time Warning */}
         {isTimeWarning && (
           <Alert className="mx-4 mt-4 border-red-200 bg-red-50">
             <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -473,10 +443,8 @@ export default function ListeningExamPage() {
           </Alert>
         )}
 
-        {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
-            {/* Left Panel - Audio Player */}
             <Card className="flex flex-col">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -511,29 +479,10 @@ export default function ListeningExamPage() {
                     {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                     {isPlaying ? "Pause Audio" : "Play Audio"}
                   </Button>
-
-                  {audioPlayed && (
-                    <div className="flex items-center gap-2 text-sm text-green-600">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>Audio has been played</span>
-                    </div>
-                  )}
-
-                  {audioEnded && (
-                    <div className="flex items-center gap-2 text-sm text-blue-600">
-                      <CheckCircle className="w-4 h-4" />
-                      <span>Audio playback completed</span>
-                    </div>
-                  )}
-
-                  {!examData.audio_url && (
-                    <div className="text-sm text-red-600">No audio file available for this exam.</div>
-                  )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Right Panel - Questions */}
             <Card className="flex flex-col">
               <CardHeader>
                 <CardTitle>Questions ({examData.questions.length})</CardTitle>
@@ -572,7 +521,6 @@ export default function ListeningExamPage() {
             </Card>
           </div>
 
-          {/* Submit Button - Bottom Center */}
           <div className="mt-6 flex justify-center">
             <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="px-12">
               {isSubmitting ? "Submitting..." : "Submit Exam"}
