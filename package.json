@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Hasan Here Exam Portal",
-  "author": "Zaber",
+  "author": "Zaber47",
   "main": "main.js",
   "scripts": {
     "dev": "next dev",
@@ -84,7 +84,7 @@
   "build": {
     "icon": "public/icon.ico",
     "appId": "com.hasan.examportal",
-    "productName": "Hasan Exam Portal",
+    "productName": "Hasan Here Exam Portal",
     "npmRebuild": false,
     "asarUnpack": [
       "server.js",
