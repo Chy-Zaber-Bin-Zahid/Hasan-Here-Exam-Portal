@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getDatabase } from "@/lib/database"
 import { existsSync, mkdirSync, writeFileSync } from "fs"
 import { join } from "path"
-
+export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   try {
     const { examType, examId, examTitle, examineeName, examineeId, answers, pdfData, timeSpent } = await request.json()

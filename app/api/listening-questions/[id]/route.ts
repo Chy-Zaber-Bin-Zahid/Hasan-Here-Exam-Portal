@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getListeningQuestion, updateListeningQuestion, deleteListeningQuestion } from "@/lib/database"
 import { deleteAudioFile } from "@/lib/file-storage"
-
+export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const id = Number.parseInt(params.id)

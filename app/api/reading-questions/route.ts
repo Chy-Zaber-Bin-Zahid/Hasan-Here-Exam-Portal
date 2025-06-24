@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getReadingQuestions, createReadingQuestion } from "@/lib/database"
-
+export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const questions = getReadingQuestions()

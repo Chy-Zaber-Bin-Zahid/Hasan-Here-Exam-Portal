@@ -1,12 +1,16 @@
 {
   "name": "my-v0-project",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
+  "description": "Hasan Here Exam Portal",
+  "author": "Zaber",
+  "main": "main.js",
   "scripts": {
-    "build": "next build",
     "dev": "next dev",
-    "lint": "next lint",
-    "start": "next start"
+    "build": "next build",
+    "start": "node server.js",
+    "electron:dev": "electron .",
+    "dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -71,8 +75,50 @@
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "electron": "^36.5.0",
+    "electron-builder": "^26.0.12",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
+  },
+  "build": {
+    "icon": "public/icon.ico",
+    "appId": "com.hasan.examportal",
+    "productName": "Hasan Exam Portal",
+    "npmRebuild": false,
+    "asarUnpack": [
+      "server.js",
+      "exam_portal.db",
+      "storage/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".next",
+        "to": ".next",
+        "filter": ["**/*"]
+      }
+    ],
+    "files": [
+      "node_modules/**/*",
+      "public/**/*",
+      "server.js",
+      "main.js",
+      "package.json",
+      "exam_portal.db",
+      "storage/**/*"
+    ],
+    "win": {
+      "icon": "public/icon.ico",
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "directories": {
+      "output": "dist"
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { saveAudioFile } from "@/lib/file-storage"
-
+export const dynamic = 'force-dynamic'
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()

@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getDatabase, deleteExamSubmission } from "@/lib/database"
 import { deleteSubmissionAndCleanUp } from "@/lib/file-storage"
-
+export const dynamic = 'force-dynamic'
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const id = Number.parseInt(params.id)
