@@ -33,13 +33,14 @@ export default function TeacherPage() {
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Question Management</h2>
-            <p className="text-gray-600">Create new questions or manage existing ones</p>
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">Question & Submission Management</h2>
+            <p className="text-gray-600">Create new questions, manage existing ones, or view student submissions.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader className="text-center">
+          <div className="grid md:grid-cols-3 gap-6 max-w-7xl mx-auto">
+            {/* FIX: Added flexbox classes to align content */}
+            <Card className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/teacher/create")}>
+              <CardHeader className="flex-grow text-center">
                 <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
                   <Plus className="w-8 h-8 text-blue-600" />
                 </div>
@@ -47,14 +48,14 @@ export default function TeacherPage() {
                 <CardDescription>Add new questions for Reading, Listening, and Writing sections</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" onClick={() => router.push("/teacher/create")}>
+                <Button className="w-full">
                   Create New Questions
                 </Button>
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader className="text-center">
+            <Card className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/teacher/manage")}>
+              <CardHeader className="flex-grow text-center">
                 <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                   <Settings className="w-8 h-8 text-green-600" />
                 </div>
@@ -62,14 +63,14 @@ export default function TeacherPage() {
                 <CardDescription>Edit, delete, or view existing question sets</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" variant="outline" onClick={() => router.push("/teacher/manage")}>
+                <Button className="w-full" variant="outline">
                   Manage Questions
                 </Button>
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/teacher/submissions")}>
-              <CardHeader className="text-center">
+            <Card className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/teacher/submissions")}>
+              <CardHeader className="flex-grow text-center">
                 <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
                   <FileCheck className="w-8 h-8 text-purple-600" />
                 </div>

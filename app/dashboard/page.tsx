@@ -35,8 +35,10 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader className="text-center">
+            {/* FIX: Added flex and flex-col to make the card a flex container */}
+            <Card className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer">
+              {/* FIX: Added flex-grow to make the header expand and push the content down */}
+              <CardHeader className="flex-grow text-center">
                 <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
                   <Users className="w-8 h-8 text-blue-600" />
                 </div>
@@ -50,8 +52,9 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader className="text-center">
+            {/* FIX: Applied the same flex properties to the second card for consistency */}
+            <Card className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer">
+              <CardHeader className="flex-grow text-center">
                 <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                   <GraduationCap className="w-8 h-8 text-green-600" />
                 </div>
