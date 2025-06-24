@@ -57,7 +57,7 @@ export default function ListeningExamPage() {
       loadExamFromDatabase(examId)
     }
   }, [examId, router])
-
+  
   const loadExamFromDatabase = async (examId: string) => {
     try {
       setLoading(true);
@@ -102,8 +102,6 @@ export default function ListeningExamPage() {
       })
       router.push("/examinee/listening")
     } finally {
-      // FIX: Always set loading to false after attempting to fetch data.
-      // The timer logic will now be handled separately.
       setLoading(false);
     }
   }
@@ -120,7 +118,6 @@ export default function ListeningExamPage() {
         
         setTimeLeft(totalExamTime);
         setTotalDuration(totalExamTime);
-        startTimer(totalExamTime);
       } else {
         handleError();
       }
@@ -135,13 +132,12 @@ export default function ListeningExamPage() {
       const defaultTime = 3600;
       setTimeLeft(defaultTime);
       setTotalDuration(defaultTime);
-      startTimer(defaultTime);
     };
 
     audio.addEventListener('loadedmetadata', handleMetadata);
     audio.addEventListener('error', handleError);
     
-    if (audio.readyState >= 1 && !timeLeft) {
+    if (audio.readyState >= 1 && timeLeft === null) {
       handleMetadata();
     }
 
@@ -151,9 +147,9 @@ export default function ListeningExamPage() {
     };
   }, [examData]);
 
-  const startTimer = (initialTime: number) => {
+  const startTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    setTimeLeft(initialTime);
+    
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev === null || prev <= 1) {
@@ -167,7 +163,7 @@ export default function ListeningExamPage() {
   }
 
   const formatTime = (seconds: number | null) => {
-    if (seconds === null) return "Calculating...";
+    if (seconds === null) return "Waiting...";
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
@@ -185,6 +181,7 @@ export default function ListeningExamPage() {
             })
         });
         setAudioPlayed(true);
+        startTimer();
     }
   }
 
@@ -234,7 +231,7 @@ export default function ListeningExamPage() {
     
     addTextWithPageBreaks("Questions and Answers:", true);
 
-    (examData?.questions || []).forEach((question: any, index: number) => {
+    (Array.isArray(examData?.questions) ? examData.questions : []).forEach((question: any, index: number) => {
       const questionText = `Question ${index + 1}: ${question.text || ''}`;
       const answerText = `Answer: ${answers[index] || "No answer provided"}`;
       
@@ -312,7 +309,7 @@ export default function ListeningExamPage() {
       </ProtectedRoute>
     )
   }
-
+  
   if (!examData) {
      return (
         <ProtectedRoute>
@@ -375,11 +372,11 @@ export default function ListeningExamPage() {
               </div>
             </div>
             <div className="pb-4">
-              <Progress value={progressPercentage} className="h-2" />
+              <Progress value={audioPlayed ? progressPercentage : 0} className="h-2" />
             </div>
           </div>
         </header>
-
+        
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
             <Card className="flex flex-col overflow-y-auto">
@@ -397,7 +394,7 @@ export default function ListeningExamPage() {
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-gray-900">Listen to the audio</h3>
                     <p className="text-sm text-gray-600 max-w-md">
-                      Click the play button below to start the audio. You can only play it once.
+                      Click the play button below to start the audio and the exam timer. You can only play it once.
                     </p>
                   </div>
                   <div>
@@ -420,29 +417,30 @@ export default function ListeningExamPage() {
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto">
                 <div className="space-y-6">
-                  {(examData?.questions || []).map((question: any, index: number) => (
-                    <div key={index} className="space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center text-sm font-medium text-purple-600">
-                          {index + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
-                            {question.text || `Question ${index + 1}`}
-                          </label>
-                          <div className="relative">
-                            <Textarea
-                              id={`question-${index}`}
-                              placeholder="Enter your answer here..."
-                              value={answers[index] || ""}
-                              onChange={(e) => handleAnswerChange(index, e.target.value)}
-                              className="min-h-[100px] resize-none"
-                            />
+                  {Array.isArray(examData?.questions) &&
+                    examData.questions.map((question: any, index: number) => (
+                      <div key={index} className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center text-sm font-medium text-purple-600">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
+                              {question.text || `Question ${index + 1}`}
+                            </label>
+                            <div className="relative">
+                              <Textarea
+                                id={`question-${index}`}
+                                placeholder="Enter your answer here..."
+                                value={answers[index] || ""}
+                                onChange={(e) => handleAnswerChange(index, e.target.value)}
+                                className="min-h-[100px] resize-none"
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </CardContent>
             </Card>
