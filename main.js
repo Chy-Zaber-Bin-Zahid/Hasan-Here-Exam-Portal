@@ -38,7 +38,7 @@ function createServer() {
     // Unpacked server.js file
     serverPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'server.js');
     // .next directory is copied to resources/.next
-    nextAppDir = process.resourcesPath;
+    nextAppDir = path.join(process.resourcesPath, 'app.asar.unpacked');
   } else {
     serverPath = path.join(__dirname, 'server.js');
     nextAppDir = __dirname;

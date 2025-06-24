@@ -47,17 +47,14 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "latest",
-    "crypto": "latest",
     "date-fns": "4.1.0",
     "embla-carousel-react": "latest",
-    "fs": "latest",
     "input-otp": "latest",
     "jsonwebtoken": "latest",
     "jspdf": "latest",
     "lucide-react": "^0.454.0",
     "next": "14.2.16",
     "next-themes": "latest",
-    "path": "latest",
     "react": "^18",
     "react-day-picker": "latest",
     "react-dom": "^18",
@@ -89,7 +86,9 @@
     "asarUnpack": [
       "server.js",
       "exam_portal.db",
-      "storage/**/*"
+      "storage/**/*",
+      "node_modules/**/*",
+      ".next/**/*"
     ],
     "extraResources": [
       {
@@ -98,18 +97,23 @@
         "filter": ["**/*"]
       }
     ],
-    "files": [
-      "node_modules/**/*",
-      "public/**/*",
-      "server.js",
-      "main.js",
-      "package.json",
-      "exam_portal.db",
-      "storage/**/*"
-    ],
+  "files": [
+    "node_modules/**/*",
+    "public/**/*",
+    "server.js",
+    "main.js",
+    "package.json",
+    "exam_portal.db",
+    "storage/**/*",
+    ".next/**/*"
+  ],
     "win": {
       "icon": "public/icon.ico",
       "target": "nsis"
+    },
+    "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
     },
     "mac": {
       "target": "dmg"
