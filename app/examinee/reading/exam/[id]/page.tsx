@@ -3,15 +3,14 @@
 import { useEffect, useState, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
-import { Clock, BookOpen, AlertTriangle, CheckCircle, User } from "lucide-react"
+import { Clock, BookOpen, CheckCircle, User, Highlighter } from "lucide-react"
 
 export default function ReadingExamPage() {
   const { logout } = useAuth()
@@ -21,12 +20,16 @@ export default function ReadingExamPage() {
 
   const [examData, setExamData] = useState<any>(null)
   const [answers, setAnswers] = useState<{ [key: number]: string }>({})
-  const [timeLeft, setTimeLeft] = useState(3600) // 60 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(3600)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [examineeName, setExamineeName] = useState("")
   const [examineeId, setExamineeId] = useState("")
   const [loading, setLoading] = useState(true)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const [examStartTime] = useState(Date.now())
+  
+  const passageRef = useRef<HTMLDivElement>(null);
+  const [popover, setPopover] = useState<{ show: boolean; x: number; y: number }>({ show: false, x: 0, y: 0 });
 
   useEffect(() => {
     const name = localStorage.getItem("examineeName")
@@ -46,11 +49,9 @@ export default function ReadingExamPage() {
     }
   }, [params.id, router])
 
-  // FIX: Updated data fetching logic to get a single exam by ID
   const loadExamFromDatabase = async (examId: string) => {
     try {
-      console.log("🔍 Loading reading exam from database, ID:", examId)
-
+      setLoading(true);
       const response = await fetch(`/api/reading-questions/${examId}`)
       if (!response.ok) {
           throw new Error(`Exam not found or failed to load. Status: ${response.status}`)
@@ -65,8 +66,8 @@ export default function ReadingExamPage() {
           description: "The requested exam could not be found in the database.",
           variant: "destructive",
         })
-        router.push("/examinee/reading")
-        return
+        router.push("/examinee/reading");
+        return; 
       }
 
       let parsedQuestions = []
@@ -80,11 +81,7 @@ export default function ReadingExamPage() {
         console.error("Error parsing questions:", error)
       }
 
-      const examWithParsedQuestions = {
-        ...currentExam,
-        questions: parsedQuestions,
-      }
-
+      const examWithParsedQuestions = { ...currentExam, questions: parsedQuestions }
       setExamData(examWithParsedQuestions)
 
       const initialAnswers: { [key: number]: string } = {}
@@ -94,7 +91,6 @@ export default function ReadingExamPage() {
       setAnswers(initialAnswers)
 
       startTimer()
-      setLoading(false)
     } catch (error) {
       console.error("❌ Error loading exam from database:", error)
       toast({
@@ -103,13 +99,17 @@ export default function ReadingExamPage() {
         variant: "destructive",
       })
       router.push("/examinee/reading")
+    } finally {
+        setLoading(false);
     }
   }
 
   const startTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
+          if(timerRef.current) clearInterval(timerRef.current);
           handleAutoSubmit()
           return 0
         }
@@ -117,8 +117,81 @@ export default function ReadingExamPage() {
       })
     }, 1000)
   }
+  
+  const handleAutoSubmit = () => {
+    if (!isSubmitting) {
+      toast({
+        title: "Time's up!",
+        description: "Your exam will be automatically submitted.",
+        variant: "destructive",
+      });
+      handleSubmit();
+    }
+  };
 
-  const formatTime = (seconds: number) => {
+  const handleMouseUp = () => {
+    // A brief delay to allow click events to fire before selection is cleared
+    setTimeout(() => {
+        const selection = window.getSelection();
+        if (selection && selection.toString().trim().length > 0) {
+            const range = selection.getRangeAt(0);
+            if (passageRef.current && passageRef.current.contains(range.commonAncestorContainer)) {
+                const rect = range.getBoundingClientRect();
+                setPopover({
+                    show: true,
+                    x: rect.left + window.scrollX + (rect.width / 2) - 50,
+                    y: rect.top + window.scrollY - 45,
+                });
+            }
+        } else {
+            setPopover({ show: false, x: 0, y: 0 });
+        }
+    }, 10);
+  };
+
+  // FIX: Using a more robust method to wrap selected text
+  const handleHighlight = () => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const mark = document.createElement('mark');
+        mark.className = 'highlight';
+        try {
+            // This method is more robust than surroundContents
+            const selectionContents = range.extractContents();
+            mark.appendChild(selectionContents);
+            range.insertNode(mark);
+        } catch (e) {
+            console.error("Highlighting failed: ", e);
+            toast({ title: "Highlight Error", description: "Cannot highlight this selection.", variant: "destructive" });
+        }
+        selection.removeAllRanges();
+    }
+    setPopover({ show: false, x: 0, y: 0 });
+  };
+
+  // FIX: Improved un-highlighting logic
+  const handlePassageClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'MARK' && target.classList.contains('highlight')) {
+        const parent = target.parentNode;
+        if (parent) {
+            const text = document.createTextNode(target.textContent || "");
+            parent.replaceChild(text, target);
+            parent.normalize(); // Merges adjacent text nodes for a clean DOM
+        }
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+    }
+  }, [])
+  
+ const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
@@ -288,23 +361,6 @@ export default function ReadingExamPage() {
     }
   }
 
-  const handleAutoSubmit = () => {
-    toast({
-      title: "Time's up!",
-      description: "Your exam has been automatically submitted.",
-      variant: "destructive",
-    })
-    handleSubmit()
-  }
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-    }
-  }, [])
-
   if (loading) {
     return (
       <ProtectedRoute>
@@ -312,7 +368,6 @@ export default function ReadingExamPage() {
           <div className="text-center">
             <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Loading Exam...</h2>
-            <p className="text-gray-600">Fetching exam data from database...</p>
           </div>
         </div>
       </ProtectedRoute>
@@ -343,6 +398,30 @@ export default function ReadingExamPage() {
 
   return (
     <ProtectedRoute>
+      <style jsx global>{`
+        .highlight {
+            background-color: #fef08a; /* A pleasant yellow */
+            cursor: pointer;
+            border-radius: 2px;
+        }
+        ::selection {
+            background: #a5d8ff; /* Custom selection color */
+        }
+      `}</style>
+
+      {popover.show && (
+        <div 
+          className="absolute z-20" 
+          style={{ left: popover.x, top: popover.y }}
+          onMouseDown={(e) => e.stopPropagation()} // Prevent this click from closing the popover
+        >
+            <Button size="sm" onClick={handleHighlight} className="shadow-lg">
+                <Highlighter className="w-4 h-4 mr-2" />
+                Highlight
+            </Button>
+        </div>
+      )}
+
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white shadow-sm border-b sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -390,26 +469,26 @@ export default function ReadingExamPage() {
           </div>
         </header>
 
-        {isTimeWarning && (
-          <Alert className="mx-4 mt-4 border-red-200 bg-red-50">
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-700">
-              Warning: Less than 10 minutes remaining! Your exam will auto-submit when time expires.
-            </AlertDescription>
-          </Alert>
-        )}
-
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" style={{height: 'calc(100vh - 230px)'}}>
+            
             <Card className="flex flex-col overflow-y-auto">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <BookOpen className="w-5 h-5 text-green-600" />
                   Reading Passage
                 </CardTitle>
+                <CardDescription>
+                  Select text to highlight, or click a highlight to remove it.
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto">
-                <div className="prose prose-sm max-w-none">
+                <div 
+                    ref={passageRef} 
+                    className="prose prose-sm max-w-none" 
+                    onMouseUp={handleMouseUp}
+                    onClick={handlePassageClick}
+                >
                   <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                     {examData.passage || "No passage available for this exam."}
                   </p>
@@ -419,7 +498,7 @@ export default function ReadingExamPage() {
 
             <Card className="flex flex-col overflow-y-auto">
               <CardHeader className="pb-4">
-                <CardTitle className="text-lg">Questions ({totalQuestions})</CardTitle>
+                 <CardTitle className="text-lg">Questions ({examData.questions.length})</CardTitle>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto">
                 <div className="space-y-6">
@@ -431,21 +510,15 @@ export default function ReadingExamPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <Label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
-                            {question.text || question.question || `Question ${index + 1}`}
+                            {question.text || `Question ${index + 1}`}
                           </Label>
-                          <div className="relative">
-                            <Textarea
-                              id={`question-${index}`}
-                              placeholder="Enter your answer here..."
-                              value={answers[index] || ""}
-                              onChange={(e) => handleAnswerChange(index, e.target.value)}
-                              className="min-h-[100px] resize-none"
-                            />
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="text-xs text-gray-500">{countWords(answers[index] || "")} words</span>
-                              {answers[index]?.trim() && <CheckCircle className="w-4 h-4 text-green-500" />}
-                            </div>
-                          </div>
+                          <Textarea
+                            id={`question-${index}`}
+                            placeholder="Enter your answer here..."
+                            value={answers[index] || ""}
+                            onChange={(e) => handleAnswerChange(index, e.target.value)}
+                            className="min-h-[100px] resize-none"
+                          />
                         </div>
                       </div>
                     </div>

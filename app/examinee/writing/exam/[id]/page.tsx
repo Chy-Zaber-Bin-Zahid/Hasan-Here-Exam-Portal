@@ -317,7 +317,6 @@ export default function WritingExamPage() {
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <FileText className="w-4 h-4" />
                   <span>{wordCount} words</span>
-                  {examData.word_limit && <span className="text-xs text-gray-500">/ {examData.word_limit} limit</span>}
                 </div>
                 <div
                   className={`flex items-center gap-2 px-3 py-1 rounded-full ${isTimeWarning ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}
@@ -377,14 +376,6 @@ export default function WritingExamPage() {
                     </div>
                   )}
 
-                  {examData.word_limit && (
-                    <div>
-                      <h3 className="font-semibold text-gray-900 mb-3">Word Limit:</h3>
-                      <div className="bg-yellow-50 p-4 rounded-lg">
-                        <p className="text-yellow-800">Maximum {examData.word_limit} words</p>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -400,12 +391,6 @@ export default function WritingExamPage() {
                     {answer.trim() && <CheckCircle className="w-4 h-4 text-green-600" />}
                     <span className="text-sm text-gray-500">
                       {wordCount} words
-                      {examData.word_limit && (
-                        <span className={wordCount > examData.word_limit ? "text-red-500" : ""}>
-                          {" "}
-                          / {examData.word_limit}
-                        </span>
-                      )}
                     </span>
                   </div>
                 </CardTitle>
@@ -417,11 +402,6 @@ export default function WritingExamPage() {
                   placeholder="Type your answer here..."
                   className="flex-1 min-h-[400px] resize-none text-base leading-relaxed"
                 />
-                {examData.word_limit && wordCount > examData.word_limit && (
-                  <p className="text-sm text-red-500 mt-2">
-                    Warning: You have exceeded the word limit by {wordCount - examData.word_limit} words.
-                  </p>
-                )}
               </CardContent>
             </Card>
           </div>
