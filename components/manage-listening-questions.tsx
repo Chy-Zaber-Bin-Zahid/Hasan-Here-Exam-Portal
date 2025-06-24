@@ -4,12 +4,11 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Eye, Loader2 } from "lucide-react"
+import { Edit, Trash2, Eye, Loader2, CalendarIcon, Search } from "lucide-react"
 import { ViewListeningQuestionModal } from "@/components/view-listening-question-modal"
 import { EditListeningQuestionModal } from "@/components/edit-listening-question-modal"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CalendarIcon, Search } from "lucide-react"
 
 export function ManageListeningQuestions() {
   const { toast } = useToast()
@@ -27,18 +26,12 @@ export function ManageListeningQuestions() {
   const loadQuestionsFromDatabase = async () => {
     try {
       setLoading(true)
-      console.log("🔍 Loading listening questions from database...")
-
       const response = await fetch("/api/listening-questions")
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-
       const data = await response.json()
-
-      // Handle different response formats safely
       const questionsArray = Array.isArray(data) ? data : data.questions || []
-      console.log("🎧 Listening questions loaded:", questionsArray.length)
       setQuestions(questionsArray)
     } catch (error) {
       console.error("❌ Error loading listening questions:", error)
@@ -79,8 +72,6 @@ export function ManageListeningQuestions() {
 
   const deleteQuestion = async (id: number) => {
     try {
-      console.log("🗑️ Deleting listening question:", id)
-
       const response = await fetch(`/api/listening-questions/${id}`, {
         method: "DELETE",
       })
@@ -115,13 +106,9 @@ export function ManageListeningQuestions() {
 
   const handleEditSave = async (updatedQuestion: any) => {
     try {
-      console.log("✏️ Updating listening question:", updatedQuestion.id)
-
       const response = await fetch(`/api/listening-questions/${updatedQuestion.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedQuestion),
       })
 
@@ -129,7 +116,8 @@ export function ManageListeningQuestions() {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      setQuestions(questions.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q)))
+      // After saving, reload all questions to ensure data is fresh
+      loadQuestionsFromDatabase();
       setEditingQuestion(null)
 
       toast({
@@ -150,14 +138,13 @@ export function ManageListeningQuestions() {
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="w-6 h-6 animate-spin mr-2" />
-        <span>Loading listening questions from database...</span>
+        <span>Loading listening questions...</span>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      {/* Search and Filter Controls */}
       <div className="flex flex-col sm:flex-row gap-4 p-4 bg-gray-50 rounded-lg">
         <div className="flex-1">
           <div className="relative">
@@ -186,35 +173,20 @@ export function ManageListeningQuestions() {
         </div>
       </div>
 
-      {/* Results Summary */}
-      {(searchTerm || dateFilter !== "all") && (
-        <div className="text-sm text-gray-600 px-1">
-          Showing {filteredQuestions.length} of {questions.length} questions
-          {searchTerm && ` matching "${searchTerm}"`}
-          {dateFilter !== "all" &&
-            ` from ${dateFilter === "today" ? "today" : dateFilter === "week" ? "last week" : "last month"}`}
-        </div>
-      )}
-
-      {/* Questions List */}
       {filteredQuestions.length === 0 ? (
-        <div className="text-center py-8">
-          {questions.length === 0 ? (
-            <>
-              <p className="text-gray-500 mb-4">No listening questions found in database.</p>
-              <p className="text-sm text-gray-400">Create some questions first to manage them here.</p>
-            </>
-          ) : (
-            <>
-              <p className="text-gray-500 mb-4">No questions match your search criteria.</p>
-              <p className="text-sm text-gray-400">Try adjusting your search term or date filter.</p>
-            </>
-          )}
+        <div className="text-center py-8 text-gray-500">
+          <p>No questions match your criteria.</p>
         </div>
       ) : (
         filteredQuestions.map((question) => {
           const questionsData =
-            typeof question.questions === "string" ? JSON.parse(question.questions) : question.questions
+            typeof question.questions === "string" ? JSON.parse(question.questions) : (question.questions || []);
+          
+          // FIX: Safely get the display name and size for the audio file
+          const displayName = question.audio_filename || question.audio_url?.split('/').pop() || 'No filename';
+          const displaySize = (question.audio_size && typeof question.audio_size === 'number') 
+              ? `(${(question.audio_size / 1024 / 1024).toFixed(2)} MB)` 
+              : '';
 
           return (
             <Card key={question.id}>
@@ -239,9 +211,8 @@ export function ManageListeningQuestions() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-600">
-                    <strong>Audio:</strong> {question.audio_filename || "No filename"}
-                    {question.audio_size && ` (${(question.audio_size / 1024 / 1024).toFixed(2)} MB)`}
+                  <p className="text-sm text-gray-600 truncate">
+                    <strong>Audio:</strong> {displayName} {displaySize}
                   </p>
                   <p className="text-sm text-gray-600">
                     <strong>Questions:</strong> {Array.isArray(questionsData) ? questionsData.length : 0} questions
@@ -250,7 +221,7 @@ export function ManageListeningQuestions() {
                     <div className="text-sm text-gray-600">
                       <strong>First Question Preview:</strong>
                       <div className="bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap text-xs break-words overflow-hidden">
-                        {questionsData[0]?.text?.substring(0, 100)}...
+                        {(questionsData[0]?.text || '').substring(0, 100)}...
                       </div>
                     </div>
                   )}
@@ -264,7 +235,6 @@ export function ManageListeningQuestions() {
         })
       )}
 
-      {/* Modals */}
       {viewingQuestion && (
         <ViewListeningQuestionModal
           question={viewingQuestion}

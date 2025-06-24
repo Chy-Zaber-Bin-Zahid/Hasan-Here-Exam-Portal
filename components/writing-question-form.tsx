@@ -9,11 +9,11 @@ import { useToast } from "@/hooks/use-toast"
 import { useState } from "react"
 import { Plus } from "lucide-react"
 
+// FIX: Removed word_limit from the form's data structure
 interface WritingForm {
   title: string
   prompt: string
   instructions: string
-  word_limit: number
 }
 
 export function WritingQuestionForm() {
@@ -26,8 +26,11 @@ export function WritingQuestionForm() {
     formState: { errors },
     reset,
   } = useForm<WritingForm>({
+    // FIX: Removed default value for word_limit
     defaultValues: {
-      word_limit: 500,
+      title: "",
+      prompt: "",
+      instructions: "",
     },
   })
 
@@ -35,17 +38,16 @@ export function WritingQuestionForm() {
     setIsSubmitting(true)
 
     try {
-      // Save to database via API
       const response = await fetch("/api/writing-questions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        // FIX: Removed word_limit from the submitted data
         body: JSON.stringify({
           title: data.title,
           prompt: data.prompt,
           instructions: data.instructions,
-          word_limit: data.word_limit,
         }),
       })
 
@@ -56,7 +58,6 @@ export function WritingQuestionForm() {
           title: "Writing questions saved",
           description: "The writing prompt and instructions have been saved to database successfully.",
         })
-
         reset()
       } else {
         throw new Error(result.error || "Failed to save questions")
@@ -104,7 +105,7 @@ export function WritingQuestionForm() {
           <Label htmlFor="instructions">Instructions & Requirements</Label>
           <Textarea
             id="instructions"
-            placeholder="Enter detailed instructions and requirements here...&#10;Example:&#10;- Write a minimum of 300 words&#10;- Include at least 3 supporting arguments&#10;- Use proper grammar and punctuation&#10;- Time limit: 45 minutes&#10;- Format: Formal essay with introduction, body, and conclusion"
+            placeholder="Enter detailed instructions and requirements here...&#10;Example:&#10;- Write a minimum of 300 words&#10;- Use proper grammar and punctuation&#10;- Time limit: 45 minutes&#10;- Format: Formal essay with introduction, body, and conclusion"
             className="min-h-[150px]"
             {...register("instructions", {
               required: "Instructions are required",
@@ -114,23 +115,7 @@ export function WritingQuestionForm() {
           {errors.instructions && <p className="text-sm text-red-500">{errors.instructions.message}</p>}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="word_limit">Word Limit</Label>
-          <Input
-            id="word_limit"
-            type="number"
-            min="100"
-            max="2000"
-            placeholder="500"
-            {...register("word_limit", {
-              required: "Word limit is required",
-              min: { value: 100, message: "Minimum 100 words" },
-              max: { value: 2000, message: "Maximum 2000 words" },
-              valueAsNumber: true,
-            })}
-          />
-          {errors.word_limit && <p className="text-sm text-red-500">{errors.word_limit.message}</p>}
-        </div>
+        {/* FIX: The entire word limit input block has been removed */}
 
         <Button type="submit" className="w-full" disabled={isSubmitting}>
           <Plus className="w-4 h-4 mr-2" />

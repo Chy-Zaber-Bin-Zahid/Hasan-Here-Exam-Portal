@@ -256,9 +256,6 @@ export function ManageWritingQuestions() {
                     {(question.instructions || "No instructions available").substring(0, 150)}...
                   </div>
                 </div>
-                <p className="text-sm text-gray-600">
-                  <strong>Word Limit:</strong> {question.word_limit || "Not specified"} words
-                </p>
                 <p className="text-xs text-gray-400">
                   Created: {new Date(question.created_at || question.createdAt || Date.now()).toLocaleDateString()}
                 </p>
