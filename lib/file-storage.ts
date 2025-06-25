@@ -56,6 +56,26 @@ export function saveAudioFile(audioBlob: Buffer, originalName: string): { filena
   }
 }
 
+// NEW: Function to save image files
+export function saveImageFile(imageBuffer: Buffer, originalName: string): { filename: string; path: string } {
+  ensureDirectories();
+  const imageDir = join(STORAGE_DIR, "writing_images");
+  if (!existsSync(imageDir)) mkdirSync(imageDir, { recursive: true });
+
+  const fileExtension = originalName.split(".").pop() || "png";
+  const filename = `${randomUUID()}.${fileExtension}`;
+  const filePath = join(imageDir, filename);
+
+  writeFileSync(filePath, imageBuffer);
+
+  // The path returned is a public API route to serve the image
+  return {
+    filename,
+    path: `/api/files/image/${filename}`,
+  };
+}
+
+
 export function getAudioFile(filename: string): Buffer | null {
   try {
     const audioDir = join(STORAGE_DIR, "teacher_audio_uploads")
@@ -67,6 +87,20 @@ export function getAudioFile(filename: string): Buffer | null {
     return null
   }
 }
+
+// NEW: Function to get an image file
+export function getImageFile(filename: string): Buffer | null {
+  try {
+    const imageDir = join(STORAGE_DIR, "writing_images");
+    const filePath = join(imageDir, filename);
+    if (!existsSync(filePath)) return null;
+    return readFileSync(filePath);
+  } catch (error) {
+    console.error("Error reading image file:", error);
+    return null;
+  }
+}
+
 
 // FIX: Add function to delete an audio file
 export function deleteAudioFile(filename: string): boolean {

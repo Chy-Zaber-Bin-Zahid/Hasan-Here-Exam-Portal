@@ -7,119 +7,173 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Loader2, Image as ImageIcon, FileText } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card"
 
-// FIX: Removed word_limit from the form's data structure
+// Defines the structure for the form fields
 interface WritingForm {
-  title: string
-  prompt: string
-  instructions: string
+    task1_prompt: string;
+    task1_image: FileList;
+    task2_prompt: string;
+    task2_instructions: string;
 }
 
 export function WritingQuestionForm() {
-  const { toast } = useToast()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+    const { toast } = useToast()
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<WritingForm>({
-    // FIX: Removed default value for word_limit
-    defaultValues: {
-      title: "",
-      prompt: "",
-      instructions: "",
-    },
-  })
+    const {
+        register,
+        handleSubmit,
+        formState: { errors },
+        reset,
+        watch
+    } = useForm<WritingForm>();
 
-  const onSubmit = async (data: WritingForm) => {
-    setIsSubmitting(true)
+    const selectedImage = watch("task1_image")?.[0];
 
-    try {
-      const response = await fetch("/api/writing-questions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        // FIX: Removed word_limit from the submitted data
-        body: JSON.stringify({
-          title: data.title,
-          prompt: data.prompt,
-          instructions: data.instructions,
-        }),
-      })
+    const onSubmit = async (data: WritingForm) => {
+        setIsSubmitting(true);
+        const imageFile = data.task1_image[0];
 
-      const result = await response.json()
+        if (!imageFile) {
+            toast({ title: "Validation Error", description: "An image for Task 1 is required.", variant: "destructive" });
+            setIsSubmitting(false);
+            return;
+        }
 
-      if (response.ok) {
-        toast({
-          title: "Writing questions saved",
-          description: "The writing prompt and instructions have been saved to database successfully.",
-        })
-        reset()
-      } else {
-        throw new Error(result.error || "Failed to save questions")
-      }
-    } catch (error) {
-      console.error("Save error:", error)
-      toast({
-        title: "Save failed",
-        description: "Failed to save writing questions to database. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+        try {
+            // Step 1: Upload the image and get its URL
+            const imageFormData = new FormData();
+            imageFormData.append("image", imageFile);
+
+            const uploadResponse = await fetch("/api/upload/image", {
+                method: "POST",
+                body: imageFormData,
+            });
+
+            const uploadResult = await uploadResponse.json();
+            if (!uploadResponse.ok) {
+                throw new Error(uploadResult.error || 'Image upload failed');
+            }
+            const imageUrl = uploadResult.path; // The public URL of the uploaded image
+
+            // Step 2: Save the question data with the image URL
+            const questionPayload = {
+                // No main title, but the API expects one, so we generate a descriptive one
+                title: `Writing: ${data.task1_prompt.substring(0, 20)}... / ${data.task2_prompt.substring(0, 20)}...`,
+                // We'll store the two prompts in the `prompt` column as a JSON string
+                prompt: JSON.stringify({
+                    task1: data.task1_prompt,
+                    task2: data.task2_prompt
+                }),
+                // We'll store instructions for task 2 and the image URL in the `instructions` column
+                instructions: JSON.stringify({
+                    task2: data.task2_instructions,
+                    imageUrl: imageUrl
+                }),
+                word_limit: 0 // This field is no longer used but the DB expects it
+            };
+            
+            const questionResponse = await fetch("/api/writing-questions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(questionPayload),
+            });
+
+            const questionResult = await questionResponse.json();
+            if (!questionResponse.ok) {
+                throw new Error(questionResult.error || "Failed to save question data.");
+            }
+
+            toast({
+                title: "Writing Exam Saved",
+                description: "The two tasks have been saved successfully.",
+            });
+            reset(); // Clear the form
+        } catch (error) {
+            console.error("Save error:", error);
+            const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+            toast({
+                title: "Save Failed",
+                description: `Failed to save the writing exam. ${errorMessage}`,
+                variant: "destructive",
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
   return (
     <div className="space-y-6">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="title">Question Set Title</Label>
-          <Input
-            id="title"
-            placeholder="Enter a title for this writing question set"
-            {...register("title", { required: "Title is required" })}
-          />
-          {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
-        </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+        
+        {/* Task 1 Section */}
+        <Card className="border-blue-200">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-blue-800"><ImageIcon className="h-6 w-6"/>Task 1</CardTitle>
+                <CardDescription>This task requires an image (e.g., graph, chart, diagram) and a prompt describing it.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                 <div className="space-y-2">
+                    <Label htmlFor="task1_image">Task 1 Image (Mandatory)</Label>
+                    <Input
+                        id="task1_image"
+                        type="file"
+                        accept="image/png, image/jpeg, image/gif, image/webp"
+                        {...register("task1_image", { required: "An image for Task 1 is required."})}
+                    />
+                    {errors.task1_image && <p className="text-sm text-red-500">{errors.task1_image.message}</p>}
+                    {selectedImage && <p className="text-sm text-muted-foreground mt-2">Selected: {selectedImage.name}</p>}
+                </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="prompt">Writing Prompt</Label>
-          <Textarea
-            id="prompt"
-            placeholder="Enter the main writing prompt or topic here...&#10;Example: Write an essay about the importance of environmental conservation in modern society."
-            className="min-h-[120px]"
-            {...register("prompt", {
-              required: "Writing prompt is required",
-              minLength: { value: 20, message: "Prompt should be at least 20 characters long" },
-            })}
-          />
-          {errors.prompt && <p className="text-sm text-red-500">{errors.prompt.message}</p>}
-        </div>
+                <div className="space-y-2">
+                    <Label htmlFor="task1_prompt">Task 1 Prompt</Label>
+                    <Textarea
+                        id="task1_prompt"
+                        placeholder="e.g., 'The chart below shows the changes in three different areas of crime in Manchester city centre from 2003-2012. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.'"
+                        className="min-h-[100px]"
+                        {...register("task1_prompt", { required: "Task 1 prompt is required." })}
+                    />
+                    {errors.task1_prompt && <p className="text-sm text-red-500">{errors.task1_prompt.message}</p>}
+                </div>
+            </CardContent>
+        </Card>
+        
+        {/* Task 2 Section */}
+         <Card className="border-green-200">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-800"><FileText className="h-6 w-6" />Task 2</CardTitle>
+                <CardDescription>This task is typically an essay question with detailed instructions.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="task2_prompt">Task 2 Prompt</Label>
+                    <Textarea
+                        id="task2_prompt"
+                        placeholder="e.g., 'Some people believe that unpaid community service should be a compulsory part of high school programmes. To what extent do you agree or disagree?'"
+                        className="min-h-[100px]"
+                        {...register("task2_prompt", { required: "Task 2 prompt is required." })}
+                    />
+                    {errors.task2_prompt && <p className="text-sm text-red-500">{errors.task2_prompt.message}</p>}
+                </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="instructions">Instructions & Requirements</Label>
-          <Textarea
-            id="instructions"
-            placeholder="Enter detailed instructions and requirements here...&#10;Example:&#10;- Write a minimum of 300 words&#10;- Use proper grammar and punctuation&#10;- Time limit: 45 minutes&#10;- Format: Formal essay with introduction, body, and conclusion"
-            className="min-h-[150px]"
-            {...register("instructions", {
-              required: "Instructions are required",
-              minLength: { value: 20, message: "Please provide detailed instructions" },
-            })}
-          />
-          {errors.instructions && <p className="text-sm text-red-500">{errors.instructions.message}</p>}
-        </div>
+                 <div className="space-y-2">
+                    <Label htmlFor="task2_instructions">Task 2 Instructions</Label>
+                    <Textarea
+                        id="task2_instructions"
+                        placeholder="e.g., 'Write at least 250 words. You should spend about 40 minutes on this task. Give reasons for your answer and include any relevant examples from your own knowledge or experience.'"
+                        className="min-h-[80px]"
+                        {...register("task2_instructions", { required: "Task 2 instructions are required." })}
+                    />
+                    {errors.task2_instructions && <p className="text-sm text-red-500">{errors.task2_instructions.message}</p>}
+                </div>
+            </CardContent>
+        </Card>
 
-        {/* FIX: The entire word limit input block has been removed */}
-
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          <Plus className="w-4 h-4 mr-2" />
-          {isSubmitting ? "Saving..." : "Save Writing Questions"}
+        <Button type="submit" className="w-full py-6 text-lg" disabled={isSubmitting}>
+          {isSubmitting ? <Loader2 className="w-6 h-6 mr-2 animate-spin" /> : <Plus className="w-6 h-6 mr-2" />}
+          {isSubmitting ? "Saving Exam..." : "Save Writing Exam (Both Tasks)"}
         </Button>
       </form>
     </div>
