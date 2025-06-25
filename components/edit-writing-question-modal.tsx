@@ -63,7 +63,6 @@ export function EditWritingQuestionModal({ question, open, onOpenChange, onSave 
     let finalImageUrl = currentImageUrl;
     let oldImageToDelete = null;
 
-    // If a new image was selected, upload it
     if (data.new_image_file && data.new_image_file.length > 0) {
         const imageFile = data.new_image_file[0];
         const imageFormData = new FormData();
@@ -77,8 +76,7 @@ export function EditWritingQuestionModal({ question, open, onOpenChange, onSave 
             const uploadResult = await uploadResponse.json();
             if (!uploadResponse.ok) throw new Error(uploadResult.error || "Image upload failed");
 
-            finalImageUrl = uploadResult.path; // Update to the new URL
-            // Mark the old image for deletion by extracting its filename
+            finalImageUrl = uploadResult.path;
             if (currentImageUrl) {
                 oldImageToDelete = currentImageUrl.split('/').pop();
             }
@@ -93,16 +91,17 @@ export function EditWritingQuestionModal({ question, open, onOpenChange, onSave 
 
     const updatedQuestion = {
       ...question,
-      title: `Writing: ${data.task1_prompt.substring(0, 20)}... / ${data.task2_prompt.substring(0, 20)}...`,
+      // FIX: Use a clean, static title
+      title: `Writing Exam (Task 1 & Task 2)`,
       prompt: JSON.stringify({
         task1: data.task1_prompt,
         task2: data.task2_prompt
       }),
       instructions: JSON.stringify({
         task2: data.task2_instructions,
-        imageUrl: finalImageUrl // Use the new or existing URL
+        imageUrl: finalImageUrl
       }),
-      old_image_to_delete: oldImageToDelete, // Pass old filename to the API
+      old_image_to_delete: oldImageToDelete,
     };
 
     onSave(updatedQuestion);
@@ -117,7 +116,6 @@ export function EditWritingQuestionModal({ question, open, onOpenChange, onSave 
         </DialogHeader>
 
         <form onSubmit={handleSubmit(handleSave)} className="space-y-6">
-          {/* Task 1 */}
           <fieldset className="border p-4 rounded-md space-y-4">
             <legend className="px-2 font-semibold">Task 1 (Image & Prompt)</legend>
             <div>
@@ -137,7 +135,6 @@ export function EditWritingQuestionModal({ question, open, onOpenChange, onSave 
              </div>
           </fieldset>
           
-          {/* Task 2 */}
           <fieldset className="border p-4 rounded-md space-y-4">
              <legend className="px-2 font-semibold">Task 2 (Essay)</legend>
               <div>

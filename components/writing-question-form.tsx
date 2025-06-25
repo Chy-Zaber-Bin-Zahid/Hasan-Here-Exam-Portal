@@ -56,23 +56,21 @@ export function WritingQuestionForm() {
             if (!uploadResponse.ok) {
                 throw new Error(uploadResult.error || 'Image upload failed');
             }
-            const imageUrl = uploadResult.path; // The public URL of the uploaded image
+            const imageUrl = uploadResult.path;
 
             // Step 2: Save the question data with the image URL
             const questionPayload = {
-                // No main title, but the API expects one, so we generate a descriptive one
-                title: `Writing: ${data.task1_prompt.substring(0, 20)}... / ${data.task2_prompt.substring(0, 20)}...`,
-                // We'll store the two prompts in the `prompt` column as a JSON string
+                // FIX: Use a clean, static title as one is not provided in the form
+                title: `Writing Exam (Task 1 & Task 2)`,
                 prompt: JSON.stringify({
                     task1: data.task1_prompt,
                     task2: data.task2_prompt
                 }),
-                // We'll store instructions for task 2 and the image URL in the `instructions` column
                 instructions: JSON.stringify({
                     task2: data.task2_instructions,
                     imageUrl: imageUrl
                 }),
-                word_limit: 0 // This field is no longer used but the DB expects it
+                word_limit: 0
             };
             
             const questionResponse = await fetch("/api/writing-questions", {
@@ -90,7 +88,7 @@ export function WritingQuestionForm() {
                 title: "Writing Exam Saved",
                 description: "The two tasks have been saved successfully.",
             });
-            reset(); // Clear the form
+            reset();
         } catch (error) {
             console.error("Save error:", error);
             const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -108,11 +106,10 @@ export function WritingQuestionForm() {
     <div className="space-y-6">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
         
-        {/* Task 1 Section */}
         <Card className="border-blue-200">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-blue-800"><ImageIcon className="h-6 w-6"/>Task 1</CardTitle>
-                <CardDescription>This task requires an image (e.g., graph, chart, diagram) and a prompt describing it.</CardDescription>
+                <CardDescription>This task requires an image (e.g., graph, chart, diagram) and a prompt.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                  <div className="space-y-2">
@@ -140,11 +137,10 @@ export function WritingQuestionForm() {
             </CardContent>
         </Card>
         
-        {/* Task 2 Section */}
          <Card className="border-green-200">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-green-800"><FileText className="h-6 w-6" />Task 2</CardTitle>
-                <CardDescription>This task is typically an essay question with detailed instructions.</CardDescription>
+                <CardDescription>This task is typically an essay question.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="space-y-2">

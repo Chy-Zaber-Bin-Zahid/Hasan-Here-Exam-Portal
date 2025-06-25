@@ -3,6 +3,7 @@ import { getDatabase } from "@/lib/database"
 import { existsSync, mkdirSync, writeFileSync } from "fs"
 import { join } from "path"
 export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const { examType, examId, examTitle, examineeName, examineeId, answers, pdfData, timeSpent } = await request.json()
@@ -33,9 +34,10 @@ export async function POST(request: NextRequest) {
       console.log("📁 Created folder:", storagePath)
     }
 
-    // Generate PDF filename
+    // --- FIX: Sanitize the exam title to remove invalid characters for a filename ---
+    const sanitizedTitle = (examTitle || examType).replace(/[\r\n\s/\\?%*:|"<>]/g, "_");
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-    const filename = `${examTitle || examType}_${timestamp}.pdf`
+    const filename = `${sanitizedTitle}_${timestamp}.pdf`
     const fullPath = join(storagePath, filename)
     const relativePath = `storage/${folderName}/${examType}/${filename}`
 
@@ -57,7 +59,7 @@ export async function POST(request: NextRequest) {
       examineeId,
       examType,
       examId || 0,
-      examTitle || `${examType}_exam`,
+      examTitle || `${examType}_exam`, // Store the original title in the DB
       JSON.stringify(answers),
       relativePath,
     )
