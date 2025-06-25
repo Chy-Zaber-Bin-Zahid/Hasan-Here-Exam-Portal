@@ -1,540 +1,422 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, MouseEvent } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
 import { Clock, BookOpen, CheckCircle, User, Highlighter } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Progress } from "@/components/ui/progress"
+
+// --- Interfaces for Data Structures ---
+interface Question {
+    text: string;
+}
+interface InstructionGroup {
+    instructionText: string;
+    questions: Question[];
+}
+interface Passage {
+    title: string;
+    passage: string;
+    instructionGroups: InstructionGroup[];
+}
+interface ReadingExam {
+    id: number;
+    title: string;
+    passages: Passage[];
+}
+
+// --- Component to render the passage with highlights ---
+const HighlightedPassage = ({ passageText, highlights, onRemoveHighlight }: { passageText: string, highlights: any[], onRemoveHighlight: (highlightId: number) => void }) => {
+    if (!highlights || highlights.length === 0) {
+        return <>{passageText}</>;
+    }
+
+    const sortedHighlights = [...highlights].sort((a, b) => a.start - b.start);
+    let lastIndex = 0;
+    const parts = [];
+
+    sortedHighlights.forEach((h) => {
+        if (h.start > lastIndex) {
+            parts.push(passageText.substring(lastIndex, h.start));
+        }
+        parts.push(
+            <mark key={h.id} className="highlight" onClick={() => onRemoveHighlight(h.id)}>
+                {passageText.substring(h.start, h.end)}
+            </mark>
+        );
+        lastIndex = h.end;
+    });
+
+    if (lastIndex < passageText.length) {
+        parts.push(passageText.substring(lastIndex));
+    }
+
+    return <>{parts}</>;
+};
 
 export default function ReadingExamPage() {
-  const { logout } = useAuth()
-  const router = useRouter()
-  const params = useParams()
-  const { toast } = useToast()
-
-  const [examData, setExamData] = useState<any>(null)
-  const [answers, setAnswers] = useState<{ [key: number]: string }>({})
-  const [timeLeft, setTimeLeft] = useState(3600)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [examineeName, setExamineeName] = useState("")
-  const [examineeId, setExamineeId] = useState("")
-  const [loading, setLoading] = useState(true)
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
-  const [examStartTime] = useState(Date.now())
-  
-  const passageRef = useRef<HTMLDivElement>(null);
-  const [popover, setPopover] = useState<{ show: boolean; x: number; y: number }>({ show: false, x: 0, y: 0 });
-
-  useEffect(() => {
-    const name = localStorage.getItem("examineeName")
-    const id = localStorage.getItem("examineeId")
-    const examId = params.id
-
-    if (!name || !id) {
-      router.push("/dashboard")
-      return
-    }
-
-    setExamineeName(name)
-    setExamineeId(id)
-
-    if (examId) {
-        loadExamFromDatabase(examId as string)
-    }
-  }, [params.id, router])
-
-  const loadExamFromDatabase = async (examId: string) => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/reading-questions/${examId}`)
-      if (!response.ok) {
-          throw new Error(`Exam not found or failed to load. Status: ${response.status}`)
-      }
-      
-      const data = await response.json()
-      const currentExam = data.question
-
-      if (!currentExam) {
-        toast({
-          title: "Exam not found",
-          description: "The requested exam could not be found in the database.",
-          variant: "destructive",
-        })
-        router.push("/examinee/reading");
-        return; 
-      }
-
-      let parsedQuestions = []
-      try {
-        if (typeof currentExam.questions === "string") {
-          parsedQuestions = JSON.parse(currentExam.questions)
-        } else if (Array.isArray(currentExam.questions)) {
-          parsedQuestions = currentExam.questions
+    const { logout } = useAuth()
+    const router = useRouter()
+    const params = useParams()
+    const { toast } = useToast()
+    
+    const [examData, setExamData] = useState<ReadingExam | null>(null)
+    const [answers, setAnswers] = useState<string[]>([]);
+    const [timeLeft, setTimeLeft] = useState(3600);
+    const [examineeName, setExamineeName] = useState("")
+    const [examineeId, setExamineeId] = useState("")
+    const [loading, setLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const [highlights, setHighlights] = useState<any[][]>([[], [], []]);
+    const [activePassageIndex, setActivePassageIndex] = useState(0);
+    
+    const timerRef = useRef<NodeJS.Timeout | null>(null)
+    
+    useEffect(() => {
+        const name = localStorage.getItem("examineeName");
+        const id = localStorage.getItem("examineeId");
+        if (!name || !id) router.push("/dashboard");
+        else {
+            setExamineeName(name);
+            setExamineeId(id);
         }
-      } catch (error) {
-        console.error("Error parsing questions:", error)
-      }
+        
+        if (params.id) loadExamFromDatabase(params.id as string);
 
-      const examWithParsedQuestions = { ...currentExam, questions: parsedQuestions }
-      setExamData(examWithParsedQuestions)
+    }, [params.id, router]);
+    
+    useEffect(() => {
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }, []);
 
-      const initialAnswers: { [key: number]: string } = {}
-      parsedQuestions.forEach((_: any, index: number) => {
-        initialAnswers[index] = ""
-      })
-      setAnswers(initialAnswers)
-
-      startTimer()
-    } catch (error) {
-      console.error("❌ Error loading exam from database:", error)
-      toast({
-        title: "Loading error",
-        description: "Failed to load exam from database. Please try again.",
-        variant: "destructive",
-      })
-      router.push("/examinee/reading")
-    } finally {
-        setLoading(false);
-    }
-  }
-
-  const startTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if(timerRef.current) clearInterval(timerRef.current);
-          handleAutoSubmit()
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-  }
-  
-  const handleAutoSubmit = () => {
-    if (!isSubmitting) {
-      toast({
-        title: "Time's up!",
-        description: "Your exam will be automatically submitted.",
-        variant: "destructive",
-      });
-      handleSubmit();
-    }
-  };
-
-  const handleMouseUp = () => {
-    // A brief delay to allow click events to fire before selection is cleared
-    setTimeout(() => {
-        const selection = window.getSelection();
-        if (selection && selection.toString().trim().length > 0) {
-            const range = selection.getRangeAt(0);
-            if (passageRef.current && passageRef.current.contains(range.commonAncestorContainer)) {
-                const rect = range.getBoundingClientRect();
-                setPopover({
-                    show: true,
-                    x: rect.left + window.scrollX + (rect.width / 2) - 50,
-                    y: rect.top + window.scrollY - 45,
-                });
-            }
-        } else {
-            setPopover({ show: false, x: 0, y: 0 });
-        }
-    }, 10);
-  };
-
-  // FIX: Using a more robust method to wrap selected text
-  const handleHighlight = () => {
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const mark = document.createElement('mark');
-        mark.className = 'highlight';
+    const loadExamFromDatabase = async (examId: string) => {
         try {
-            // This method is more robust than surroundContents
-            const selectionContents = range.extractContents();
-            mark.appendChild(selectionContents);
-            range.insertNode(mark);
-        } catch (e) {
-            console.error("Highlighting failed: ", e);
-            toast({ title: "Highlight Error", description: "Cannot highlight this selection.", variant: "destructive" });
-        }
-        selection.removeAllRanges();
-    }
-    setPopover({ show: false, x: 0, y: 0 });
-  };
-
-  // FIX: Improved un-highlighting logic
-  const handlePassageClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'MARK' && target.classList.contains('highlight')) {
-        const parent = target.parentNode;
-        if (parent) {
-            const text = document.createTextNode(target.textContent || "");
-            parent.replaceChild(text, target);
-            parent.normalize(); // Merges adjacent text nodes for a clean DOM
-        }
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-    }
-  }, [])
-  
- const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
-  }
-
-  const countWords = (text: string) => {
-    return text
-      .trim()
-      .split(/\s+/)
-      .filter((word) => word.length > 0).length
-  }
-
-  const handleAnswerChange = (questionIndex: number, value: string) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionIndex]: value,
-    }))
-  }
-
-  const generatePDF = async () => {
-    const { jsPDF } = await import("jspdf")
-
-    const doc = new jsPDF()
-    const pageWidth = doc.internal.pageSize.width
-    const margin = 20
-    const lineHeight = 7
-    let yPosition = margin
-
-    doc.setFontSize(16)
-    doc.setFont("helvetica", "bold")
-    doc.text("Reading Exam Results", margin, yPosition)
-    yPosition += lineHeight * 2
-
-    doc.setFontSize(12)
-    doc.setFont("helvetica", "normal")
-    doc.text(`Student Name: ${examineeName}`, margin, yPosition)
-    yPosition += lineHeight
-    doc.text(`Student ID: ${examineeId}`, margin, yPosition)
-    yPosition += lineHeight
-    doc.text(`Exam Title: ${examData.title}`, margin, yPosition)
-    yPosition += lineHeight
-    doc.text(`Submission Date: ${new Date().toLocaleString()}`, margin, yPosition)
-    yPosition += lineHeight * 2
-
-    doc.setFont("helvetica", "bold")
-    doc.text("Reading Passage:", margin, yPosition)
-    yPosition += lineHeight
-    doc.setFont("helvetica", "normal")
-
-    const passageLines = doc.splitTextToSize(examData.passage, pageWidth - 2 * margin)
-    passageLines.forEach((line: string) => {
-      if (yPosition > 270) {
-        doc.addPage()
-        yPosition = margin
-      }
-      doc.text(line, margin, yPosition)
-      yPosition += lineHeight
-    })
-    yPosition += lineHeight
-
-    doc.setFont("helvetica", "bold")
-    doc.text("Questions and Answers:", margin, yPosition)
-    yPosition += lineHeight * 1.5
-
-    examData.questions.forEach((question: any, index: number) => {
-      if (yPosition > 250) {
-        doc.addPage()
-        yPosition = margin
-      }
-
-      doc.setFont("helvetica", "bold")
-      doc.text(`Question ${index + 1}:`, margin, yPosition)
-      yPosition += lineHeight
-      doc.setFont("helvetica", "normal")
-
-      const questionText = question.text || question.question || `Question ${index + 1}`
-      const questionLines = doc.splitTextToSize(questionText, pageWidth - 2 * margin)
-      questionLines.forEach((line: string) => {
-        if (yPosition > 270) {
-          doc.addPage()
-          yPosition = margin
-        }
-        doc.text(line, margin, yPosition)
-        yPosition += lineHeight
-      })
-      yPosition += lineHeight * 0.5
-
-      doc.setFont("helvetica", "bold")
-      doc.text("Answer:", margin, yPosition)
-      yPosition += lineHeight
-      doc.setFont("helvetica", "normal")
-
-      const answer = answers[index] || "No answer provided"
-      const answerLines = doc.splitTextToSize(answer, pageWidth - 2 * margin)
-      answerLines.forEach((line: string) => {
-        if (yPosition > 270) {
-          doc.addPage()
-          yPosition = margin
-        }
-        doc.text(line, margin, yPosition)
-        yPosition += lineHeight
-      })
-      yPosition += lineHeight * 1.5
-    })
-
-    return doc
-  }
-
-  const handleSubmit = async () => {
-    if (isSubmitting) return
-
-    setIsSubmitting(true)
-
-    try {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-      }
-
-      const pdf = await generatePDF()
-      const pdfBlob = pdf.output("blob")
-
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const pdfDataUrl = reader.result as string
-
-        const response = await fetch("/api/submit-exam", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            examType: "reading",
-            examId: examData?.id,
-            examTitle: examData?.title,
-            examineeName: examineeName,
-            examineeId: examineeId,
-            answers: answers,
-            pdfData: pdfDataUrl,
-            timeSpent: 3600 - timeLeft,
-          }),
-        })
-
-        const result = await response.json()
-
-        if (result.success) {
-          toast({
-            title: "Exam submitted successfully",
-            description: `Your reading exam has been saved.`,
-          })
-
-          router.push("/examinee")
-        } else {
-          throw new Error(result.error || "Submission failed")
-        }
-      }
-
-      reader.readAsDataURL(pdfBlob)
-    } catch (error) {
-      console.error("Error submitting exam:", error)
-      toast({
-        title: "Submission error",
-        description: "There was an error submitting your exam. Please try again.",
-        variant: "destructive",
-      })
-      setIsSubmitting(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Loading Exam...</h2>
-          </div>
-        </div>
-      </ProtectedRoute>
-    )
-  }
-
-  if (!examData) {
-    return (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Not Found</h2>
-            <p className="text-gray-600">The requested exam could not be loaded.</p>
-            <Button onClick={() => router.push("/examinee/reading")} className="mt-4">
-              Back to Reading Exams
-            </Button>
-          </div>
-        </div>
-      </ProtectedRoute>
-    )
-  }
-
-  const answeredQuestions = Object.values(answers).filter((answer) => answer.trim() !== "").length
-  const totalQuestions = examData.questions.length
-  const progressPercentage = ((3600 - timeLeft) / 3600) * 100
-  const isTimeWarning = timeLeft < 600
-
-  return (
-    <ProtectedRoute>
-      <style jsx global>{`
-        .highlight {
-            background-color: #fef08a; /* A pleasant yellow */
-            cursor: pointer;
-            border-radius: 2px;
-        }
-        ::selection {
-            background: #a5d8ff; /* Custom selection color */
-        }
-      `}</style>
-
-      {popover.show && (
-        <div 
-          className="absolute z-20" 
-          style={{ left: popover.x, top: popover.y }}
-          onMouseDown={(e) => e.stopPropagation()} // Prevent this click from closing the popover
-        >
-            <Button size="sm" onClick={handleHighlight} className="shadow-lg">
-                <Highlighter className="w-4 h-4 mr-2" />
-                Highlight
-            </Button>
-        </div>
-      )}
-
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <BookOpen className="w-4 h-4 text-green-600" />
-                  </div>
-                  <div>
-                    <h1 className="text-lg font-semibold text-gray-900">Reading Exam</h1>
-                    <p className="text-sm text-gray-600">{examData.title}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-600">{examineeName}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>
-                    {answeredQuestions}/{totalQuestions} answered
-                  </span>
-                </div>
-                <div
-                  className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-                    isTimeWarning ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
-                  }`}
-                >
-                  <Clock className="w-4 h-4" />
-                  <span className="font-mono text-sm">{formatTime(timeLeft)}</span>
-                </div>
-                <Button variant="outline" onClick={logout}>
-                  Logout
-                </Button>
-              </div>
-            </div>
-
-            <div className="pb-4">
-              <Progress value={progressPercentage} className="h-2" />
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" style={{height: 'calc(100vh - 230px)'}}>
+            setLoading(true);
+            const response = await fetch(`/api/reading-questions/${examId}`);
+            if (!response.ok) throw new Error(`Exam not found. Status: ${response.status}`);
             
-            <Card className="flex flex-col overflow-y-auto">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-green-600" />
-                  Reading Passage
-                </CardTitle>
-                <CardDescription>
-                  Select text to highlight, or click a highlight to remove it.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto">
-                <div 
-                    ref={passageRef} 
-                    className="prose prose-sm max-w-none" 
-                    onMouseUp={handleMouseUp}
-                    onClick={handlePassageClick}
-                >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {examData.passage || "No passage available for this exam."}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            const data = await response.json();
+            const currentExam = data.question;
+            if (!currentExam) {
+                toast({ title: "Exam not found", variant: "destructive" });
+                router.push("/examinee/reading");
+                return;
+            }
 
-            <Card className="flex flex-col overflow-y-auto">
-              <CardHeader className="pb-4">
-                 <CardTitle className="text-lg">Questions ({examData.questions.length})</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto">
-                <div className="space-y-6">
-                  {examData.questions.map((question: any, index: number) => (
-                    <div key={index} className="space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-6 h-6 bg-green-100 rounded-full flex items-center justify-center text-sm font-medium text-green-600">
-                          {index + 1}
+            const parsedPassages = typeof currentExam.questions === 'string' ? JSON.parse(currentExam.questions) : currentExam.questions;
+            setExamData({ ...currentExam, passages: parsedPassages });
+
+            const totalQuestions = parsedPassages.reduce((acc: number, p: Passage) => 
+                acc + p.instructionGroups.reduce((iAcc, ig) => iAcc + ig.questions.length, 0), 0);
+            
+            setAnswers(new Array(totalQuestions).fill(""));
+            startTimer();
+        } catch (error) {
+            console.error("❌ Error loading exam:", error);
+            toast({ title: "Loading error", variant: "destructive" });
+            router.push("/examinee/reading");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const startTimer = () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    if(timerRef.current) clearInterval(timerRef.current);
+                    handleAutoSubmit();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    };
+
+    const formatTime = (seconds: number) => {
+        const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+        const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+        const s = (seconds % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    };
+
+    const handleAnswerChange = (questionIndex: number, value: string) => {
+        const newAnswers = [...answers];
+        newAnswers[questionIndex] = value;
+        setAnswers(newAnswers);
+    };
+
+    const handleContextMenu = (e: MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0 && selection.toString().trim().length > 0) {
+            const range = selection.getRangeAt(0);
+            
+            const passageContainer = e.currentTarget;
+            if (!passageContainer.contains(range.startContainer) || !passageContainer.contains(range.endContainer)) {
+                selection.removeAllRanges();
+                return;
+            }
+            
+            const preSelectionRange = document.createRange();
+            preSelectionRange.selectNodeContents(passageContainer);
+            preSelectionRange.setEnd(range.startContainer, range.startOffset);
+            const start = preSelectionRange.toString().length;
+            const end = start + range.toString().length;
+
+            const currentHighlights = highlights[activePassageIndex] || [];
+            const isOverlapping = currentHighlights.some(h => start < h.end && end > h.start);
+
+            if (isOverlapping) {
+                toast({ title: "Cannot highlight overlapping text.", variant: "destructive" });
+                selection.removeAllRanges();
+                return;
+            }
+
+            const newHighlight = { id: Date.now(), start, end };
+
+            setHighlights(prev => {
+                const newHighlights = [...prev];
+                newHighlights[activePassageIndex] = [...(newHighlights[activePassageIndex] || []), newHighlight];
+                return newHighlights;
+            });
+            selection.removeAllRanges();
+        }
+    };
+    
+    const handleRemoveHighlight = (highlightId: number) => {
+        setHighlights(prev => {
+            const newHighlights = [...prev];
+            newHighlights[activePassageIndex] = newHighlights[activePassageIndex].filter(h => h.id !== highlightId);
+            return newHighlights;
+        });
+    };
+    
+    // --- FINAL, CORRECTED PDF Generation Function ---
+    const generatePDF = async () => {
+        const { jsPDF } = await import("jspdf");
+        const doc = new jsPDF({ unit: "pt", format: "a4" });
+    
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 40;
+        const maxLineWidth = pageWidth - margin * 2;
+        let y = margin;
+        let globalQuestionCounter = 0; 
+    
+        const addWrappedText = (text: string, options: any = {}) => {
+            const { x = margin, fontStyle = "normal", fontSize = 10, textColor = [0, 0, 0], lineSpacing = 12 } = options;
+            doc.setFont("helvetica", fontStyle).setFontSize(fontSize).setTextColor(textColor[0], textColor[1], textColor[2]);
+    
+            const lines = doc.splitTextToSize(text, maxLineWidth);
+            lines.forEach((line: string) => {
+                if (y > doc.internal.pageSize.getHeight() - margin) {
+                    doc.addPage();
+                    y = margin;
+                }
+                doc.text(line, x, y);
+                y += lineSpacing;
+            });
+        };
+    
+        // Header
+        doc.setFont("helvetica", "bold").setFontSize(20);
+        addWrappedText(examData?.title || 'Reading Exam', { x: pageWidth / 2, align: 'center', lineSpacing: 20 });
+        y += 10;
+        doc.setFont("helvetica", "normal").setFontSize(10);
+        doc.text(`Examinee: ${examineeName} (ID: ${examineeId})`, margin, y);
+        y += 20;
+        doc.setDrawColor(220, 220, 220).line(margin, y, pageWidth - margin, y);
+        y += 20;
+    
+        // Content
+        examData?.passages.forEach((passage, pIndex) => {
+            if (pIndex > 0) { doc.addPage(); y = margin; }
+            doc.setFontSize(16).setFont('helvetica', 'bold');
+            addWrappedText(passage.title, { lineSpacing: 18 });
+            
+            let questionNumberInPassage = 1;
+            passage.instructionGroups.forEach(group => {
+                y += 10;
+                addWrappedText(`Instructions: ${group.instructionText}`, { fontStyle: 'italic', fontSize: 10, lineSpacing: 14 });
+                y += 10;
+                
+                group.questions.forEach((q) => {
+                    const questionText = `${questionNumberInPassage}. ${q.text}`;
+                    addWrappedText(questionText, { fontSize: 11, fontStyle: 'bold', lineSpacing: 14 });
+    
+                    addWrappedText(`   Answer: ${answers[globalQuestionCounter] || "No answer provided"}`, { fontSize: 11, textColor: [0, 0, 150], x: margin + 10 });
+                    y += 20;
+                    
+                    globalQuestionCounter++;
+                    questionNumberInPassage++;
+                });
+            });
+        });
+    
+        return doc;
+    };
+    
+    const handleSubmit = async () => {
+        if(isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            if (timerRef.current) clearInterval(timerRef.current);
+            const pdf = await generatePDF();
+            const pdfBlob = pdf.output("blob");
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const pdfDataUrl = reader.result as string;
+                const response = await fetch("/api/submit-exam", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        examType: "reading",
+                        examId: examData?.id,
+                        examTitle: examData?.title,
+                        examineeName,
+                        examineeId,
+                        answers,
+                        pdfData: pdfDataUrl,
+                    }),
+                });
+                const result = await response.json();
+                if (result.success) {
+                    toast({ title: "Exam submitted successfully" });
+                    router.push("/examinee");
+                } else {
+                    throw new Error(result.error || "Submission failed");
+                }
+            };
+            reader.readAsDataURL(pdfBlob);
+        } catch (error) {
+            console.error("Submission error:", error);
+            toast({ title: "Submission Error", variant: "destructive" });
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleAutoSubmit = () => {
+        if(isSubmitting) return;
+        handleSubmit();
+    };
+
+    if (loading || !examData) return <ProtectedRoute><div className="flex justify-center items-center min-h-screen">Loading Exam...</div></ProtectedRoute>;
+    
+    const answeredQuestions = answers.filter(a => a.trim()).length;
+    const totalQuestions = answers.length;
+    
+    return (
+        <ProtectedRoute>
+            <style jsx global>{`.highlight { background-color: #fef08a; cursor: pointer; }`}</style>
+            
+            <div className="flex flex-col h-screen bg-gray-50">
+                <header className="bg-white shadow-sm border-b p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                        <h1 className="text-lg font-semibold">{examData.title}</h1>
+                        <div className="flex items-center gap-4">
+                            <span className="text-sm flex items-center gap-1"><User className="w-4 h-4" /> {examineeName}</span>
+                            <span className="text-sm flex items-center gap-1"><CheckCircle className="w-4 h-4" /> {answeredQuestions}/{totalQuestions} Answered</span>
+                            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700">
+                                <Clock className="w-4 h-4" /><span className="font-mono">{formatTime(timeLeft)}</span>
+                            </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <Label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
-                            {question.text || `Question ${index + 1}`}
-                          </Label>
-                          <Textarea
-                            id={`question-${index}`}
-                            placeholder="Enter your answer here..."
-                            value={answers[index] || ""}
-                            onChange={(e) => handleAnswerChange(index, e.target.value)}
-                            className="min-h-[100px] resize-none"
-                          />
-                        </div>
-                      </div>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                    <Progress value={(3600 - timeLeft) / 36} className="h-2" />
+                </header>
 
-          <div className="mt-6 flex justify-center">
-            <Button onClick={handleSubmit} disabled={isSubmitting} size="lg" className="px-12">
-              {isSubmitting ? "Submitting..." : "Submit Exam"}
-            </Button>
-          </div>
-        </main>
-      </div>
-    </ProtectedRoute>
-  )
+                <main className="flex-1 min-h-0">
+                    <Tabs defaultValue="passage-0" onValueChange={(val) => setActivePassageIndex(parseInt(val.split('-')[1]))} className="h-full flex flex-col">
+                        <TabsList className="grid w-full grid-cols-3">
+                            {examData.passages.map((_, index) => (
+                                <TabsTrigger key={index} value={`passage-${index}`}>Passage {index + 1}</TabsTrigger>
+                            ))}
+                        </TabsList>
+
+                        {examData.passages.map((passage, pIndex) => {
+                            let passageQuestionOffset = 0;
+                            if (pIndex > 0) {
+                                for (let i = 0; i < pIndex; i++) {
+                                    passageQuestionOffset += examData.passages[i].instructionGroups.reduce((acc, ig) => acc + ig.questions.length, 0);
+                                }
+                            }
+                            
+                            return (
+                                <TabsContent key={pIndex} value={`passage-${pIndex}`} className="flex-1 min-h-0">
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full p-4">
+                                        <Card className="flex flex-col overflow-y-auto">
+                                            <CardHeader>
+                                                <CardTitle>{passage.title}</CardTitle>
+                                                <CardDescription className="text-xs pt-1">
+                                                    Select text and right-click to highlight. Click on a highlight to remove it.
+                                                </CardDescription>
+                                            </CardHeader>
+                                            <CardContent 
+                                                onContextMenu={handleContextMenu}
+                                                className="flex-1 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed"
+                                            >
+                                               <HighlightedPassage 
+                                                    passageText={passage.passage} 
+                                                    highlights={highlights[pIndex]}
+                                                    onRemoveHighlight={handleRemoveHighlight}
+                                                />
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="flex flex-col overflow-y-auto">
+                                            <CardHeader><CardTitle>Questions</CardTitle></CardHeader>
+                                            <CardContent className="flex-1 overflow-y-auto space-y-4">
+                                                {passage.instructionGroups.map((group, gIndex) => {
+                                                    let questionCounterInGroup = 0;
+                                                    if (gIndex > 0) {
+                                                        for (let i = 0; i < gIndex; i++) {
+                                                            questionCounterInGroup += passage.instructionGroups[i].questions.length;
+                                                        }
+                                                    }
+                                                    return (
+                                                    <div key={gIndex} className="p-3 bg-gray-100 rounded-md">
+                                                        <p className="italic text-sm mb-3 whitespace-pre-wrap">{group.instructionText}</p>
+                                                        {group.questions.map((q, qIndex) => {
+                                                            const globalQIndex = passageQuestionOffset + questionCounterInGroup + qIndex;
+                                                            const questionNumberForDisplay = questionCounterInGroup + qIndex + 1;
+                                                            return (
+                                                                <div key={qIndex} className="space-y-2 mb-4">
+                                                                    <Label htmlFor={`q-${globalQIndex}`} className="flex items-start gap-2">
+                                                                        <span className="font-bold">{questionNumberForDisplay}.</span> 
+                                                                        <span className="flex-1 whitespace-pre-wrap">{q.text}</span>
+                                                                    </Label>
+                                                                    <Textarea
+                                                                        id={`q-${globalQIndex}`}
+                                                                        value={answers[globalQIndex] || ''}
+                                                                        onChange={(e) => handleAnswerChange(globalQIndex, e.target.value)}
+                                                                        spellCheck="false"
+                                                                    />
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )})}
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                </TabsContent>
+                            )
+                        })}
+                    </Tabs>
+                </main>
+                 <footer className="p-4 bg-white border-t flex justify-center">
+                    <Button onClick={handleSubmit} disabled={isSubmitting} size="lg">
+                        {isSubmitting ? "Submitting..." : "Submit Exam"}
+                    </Button>
+                </footer>
+            </div>
+        </ProtectedRoute>
+    )
 }
