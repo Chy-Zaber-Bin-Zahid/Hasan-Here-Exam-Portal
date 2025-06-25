@@ -4,12 +4,32 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Eye, Loader2 } from "lucide-react"
+import { Edit, Trash2, Eye, Loader2, BookOpen } from "lucide-react"
 import { EditReadingQuestionModal } from "@/components/edit-reading-question-modal"
 import { ViewReadingQuestionModal } from "@/components/view-reading-question-modal"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CalendarIcon, Search } from "lucide-react"
+
+// Helper function to count total questions in the new nested format
+const getTotalQuestionCount = (question: any): number => {
+    if (!question || !question.questions) return 0;
+    try {
+        const passages = JSON.parse(question.questions);
+        if (!Array.isArray(passages)) return 0;
+        
+        return passages.reduce((total, passage) => {
+            if (!passage.instructionGroups) return total;
+            const passageQuestions = passage.instructionGroups.reduce((subTotal: any, group: any) => {
+                return subTotal + (group.questions?.length || 0);
+            }, 0);
+            return total + passageQuestions;
+        }, 0);
+    } catch (e) {
+        console.error("Failed to parse questions for count:", e);
+        return 0;
+    }
+}
 
 export function ManageReadingQuestions() {
   const { toast } = useToast()
@@ -21,7 +41,6 @@ export function ManageReadingQuestions() {
   const [dateFilter, setDateFilter] = useState("all")
 
   useEffect(() => {
-    // Ensure questions is always an array
     if (!Array.isArray(questions)) {
       setQuestions([])
     }
@@ -34,16 +53,12 @@ export function ManageReadingQuestions() {
   const loadQuestionsFromDatabase = async () => {
     try {
       setLoading(true)
-      console.log("🔍 Loading reading questions from database...")
-
       const response = await fetch("/api/reading-questions")
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-
       const data = await response.json()
       const questionsArray = data.questions || data || []
-      console.log("📚 Reading questions loaded:", questionsArray.length)
       setQuestions(questionsArray)
     } catch (error) {
       console.error("❌ Error loading reading questions:", error)
@@ -82,8 +97,6 @@ export function ManageReadingQuestions() {
 
   const deleteQuestion = async (id: number) => {
     try {
-      console.log("🗑️ Deleting reading question:", id)
-
       const response = await fetch(`/api/reading-questions/${id}`, {
         method: "DELETE",
       })
@@ -92,9 +105,7 @@ export function ManageReadingQuestions() {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      // Remove from local state
       setQuestions(questions.filter((q) => q.id !== id))
-
       toast({
         title: "Question deleted",
         description: "The reading question set has been deleted successfully.",
@@ -119,28 +130,27 @@ export function ManageReadingQuestions() {
 
   const handleEditSave = async (updatedQuestion: any) => {
     try {
-      console.log("✏️ Updating reading question:", updatedQuestion.id)
+      setEditingQuestion(null);
+      setLoading(true); // Show loading state while saving
 
       const response = await fetch(`/api/reading-questions/${updatedQuestion.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedQuestion),
       })
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-
-      // Update local state
-      setQuestions(questions.map((q) => (q.id === updatedQuestion.id ? updatedQuestion : q)))
-      setEditingQuestion(null)
-
+      
       toast({
         title: "Question updated",
         description: "The reading question set has been updated successfully.",
       })
+      
+      // Reload all data from the server to ensure consistency
+      await loadQuestionsFromDatabase();
+
     } catch (error) {
       console.error("❌ Error updating question:", error)
       toast({
@@ -148,6 +158,8 @@ export function ManageReadingQuestions() {
         description: "Failed to update the question.",
         variant: "destructive",
       })
+    } finally {
+        setLoading(false);
     }
   }
 
@@ -155,14 +167,13 @@ export function ManageReadingQuestions() {
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="w-6 h-6 animate-spin mr-2" />
-        <span>Loading reading questions from database...</span>
+        <span>Loading reading questions...</span>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      {/* Search and Filter Controls */}
       <div className="flex flex-col sm:flex-row gap-4 p-4 bg-gray-50 rounded-lg">
         <div className="flex-1">
           <div className="relative">
@@ -190,37 +201,14 @@ export function ManageReadingQuestions() {
           </Select>
         </div>
       </div>
-
-      {/* Results Summary */}
-      {(searchTerm || dateFilter !== "all") && (
-        <div className="text-sm text-gray-600 px-1">
-          Showing {filteredQuestions.length} of {questions.length} questions
-          {searchTerm && ` matching "${searchTerm}"`}
-          {dateFilter !== "all" &&
-            ` from ${dateFilter === "today" ? "today" : dateFilter === "week" ? "last week" : "last month"}`}
-        </div>
-      )}
-
-      {/* Questions List */}
+      
       {filteredQuestions.length === 0 ? (
-        <div className="text-center py-8">
-          {questions.length === 0 ? (
-            <>
-              <p className="text-gray-500 mb-4">No reading questions found in database.</p>
-              <p className="text-sm text-gray-400">Create some questions first to manage them here.</p>
-            </>
-          ) : (
-            <>
-              <p className="text-gray-500 mb-4">No questions match your search criteria.</p>
-              <p className="text-sm text-gray-400">Try adjusting your search term or date filter.</p>
-            </>
-          )}
+        <div className="text-center py-8 text-gray-500">
+          <p>No reading questions found.</p>
         </div>
       ) : (
         filteredQuestions.map((question) => {
-          const questionsData =
-            typeof question.questions === "string" ? JSON.parse(question.questions) : question.questions
-
+          const totalQuestions = getTotalQuestionCount(question);
           return (
             <Card key={question.id}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -244,16 +232,16 @@ export function ManageReadingQuestions() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-600">
-                    <strong>Questions:</strong> {Array.isArray(questionsData) ? questionsData.length : 0} questions
+                  <p className="text-sm text-gray-600 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" /> 
+                    <strong>3 Passages</strong>
                   </p>
-                  <div className="text-sm text-gray-600">
-                    <strong>Passage Preview:</strong>
-                    <div className="bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap text-xs break-words overflow-hidden">
-                      {question.passage.substring(0, 200)}...
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-400">Created: {new Date(question.created_at).toLocaleDateString()}</p>
+                  <p className="text-sm text-gray-600">
+                    <strong>Total Questions:</strong> {totalQuestions}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Created: {new Date(question.created_at).toLocaleDateString()}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -261,7 +249,6 @@ export function ManageReadingQuestions() {
         })
       )}
 
-      {/* Modals */}
       {editingQuestion && (
         <EditReadingQuestionModal
           question={editingQuestion}

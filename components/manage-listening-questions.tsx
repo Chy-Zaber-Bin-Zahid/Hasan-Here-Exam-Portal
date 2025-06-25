@@ -46,29 +46,41 @@ export function ManageListeningQuestions() {
     }
   }
 
-  const filteredQuestions = Array.isArray(questions)
+    const filteredQuestions = Array.isArray(questions)
     ? questions.filter((question) => {
-        const matchesSearch = question.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false
+        const matchesSearch = question.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
 
-        if (dateFilter === "all") return matchesSearch
+        if (dateFilter === "all") return matchesSearch;
+        
+        if (!question.created_at) return false;
 
-        const questionDate = new Date(question.created_at)
-        const now = new Date()
+        // FIX: Implement robust date filtering logic
+        const questionDate = new Date(question.created_at.replace(' ', 'T') + 'Z'); // Parse as UTC
+        const now = new Date();
+        let matchesDate = false;
 
         switch (dateFilter) {
           case "today":
-            return matchesSearch && questionDate.toDateString() === now.toDateString()
+            matchesDate = questionDate.getFullYear() === now.getFullYear() &&
+                          questionDate.getMonth() === now.getMonth() &&
+                          questionDate.getDate() === now.getDate();
+            break;
           case "week":
-            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-            return matchesSearch && questionDate >= weekAgo
+            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            matchesDate = questionDate >= oneWeekAgo;
+            break;
           case "month":
-            const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-            return matchesSearch && questionDate >= monthAgo
+            const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            matchesDate = questionDate >= oneMonthAgo;
+            break;
           default:
-            return matchesSearch
+            matchesDate = true;
         }
+        
+        return matchesSearch && matchesDate;
       })
-    : []
+    : [];
+
 
   const deleteQuestion = async (id: number) => {
     try {
@@ -182,7 +194,6 @@ export function ManageListeningQuestions() {
           const questionsData =
             typeof question.questions === "string" ? JSON.parse(question.questions) : (question.questions || []);
           
-          // FIX: Safely get the display name and size for the audio file
           const displayName = question.audio_filename || question.audio_url?.split('/').pop() || 'No filename';
           const displaySize = (question.audio_size && typeof question.audio_size === 'number') 
               ? `(${(question.audio_size / 1024 / 1024).toFixed(2)} MB)` 
@@ -215,7 +226,7 @@ export function ManageListeningQuestions() {
                     <strong>Audio:</strong> {displayName} {displaySize}
                   </p>
                   <p className="text-sm text-gray-600">
-                    <strong>Questions:</strong> {Array.isArray(questionsData) ? questionsData.length : 0} questions
+                    <strong>Questions:</strong> {Array.isArray(questionsData) ? questionsData.length : 0}
                   </p>
                   {Array.isArray(questionsData) && questionsData.length > 0 && (
                     <div className="text-sm text-gray-600">
