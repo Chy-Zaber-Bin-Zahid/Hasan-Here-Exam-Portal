@@ -52,10 +52,8 @@ export default function WritingSelectionPage() {
   const filteredQuestions = writingQuestions.filter((question) => {
     const matchesSearch = question.title.toLowerCase().includes(searchTerm.toLowerCase())
 
-    // FIX: Replaced entire date filtering logic with a robust version
     if (dateFilter === "all") return matchesSearch;
     
-    // Ensure created_at exists before creating a date from it
     if (!question.created_at) return false;
 
     const submissionDate = new Date(question.created_at.replace(' ', 'T') + 'Z');
@@ -161,7 +159,15 @@ export default function WritingSelectionPage() {
             </div>
           ) : (
             <div className="grid gap-6">
-              {filteredQuestions.map((question) => (
+              {filteredQuestions.map((question) => {
+                let prompts = { task1: "Click to see prompt.", task2: "Click to see prompt."};
+                try {
+                    if (question.prompt) {
+                        prompts = JSON.parse(question.prompt);
+                    }
+                } catch {}
+
+                return (
                 <Card key={question.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -172,7 +178,7 @@ export default function WritingSelectionPage() {
                         <div>
                           <CardTitle className="text-xl">{question.title}</CardTitle>
                           <CardDescription className="mt-1">
-                            Writing examination with prompt and instructions
+                            A two-part writing examination.
                           </CardDescription>
                         </div>
                       </div>
@@ -185,9 +191,15 @@ export default function WritingSelectionPage() {
                   <CardContent>
                     <div className="space-y-3">
                       <div>
-                        <p className="text-sm font-medium text-gray-700">Prompt Preview:</p>
-                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1">
-                          {question.prompt.substring(0, 200)}...
+                        <p className="text-sm font-medium text-gray-700">Task 1 Preview:</p>
+                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1 line-clamp-2">
+                           {prompts.task1}
+                        </p>
+                      </div>
+                       <div>
+                        <p className="text-sm font-medium text-gray-700">Task 2 Preview:</p>
+                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1 line-clamp-2">
+                           {prompts.task2}
                         </p>
                       </div>
                       <div className="flex justify-end">
@@ -196,7 +208,7 @@ export default function WritingSelectionPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              )})}
             </div>
           )}
         </main>

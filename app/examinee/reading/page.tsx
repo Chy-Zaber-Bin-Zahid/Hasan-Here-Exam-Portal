@@ -10,6 +10,27 @@ import { ArrowLeft, BookOpen, Clock, Search, Filter } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+// Helper function to correctly count questions from the new nested structure
+const getTotalQuestionCount = (question: any): number => {
+    if (!question || !question.questions) return 0;
+    try {
+        const passages = JSON.parse(question.questions);
+        if (!Array.isArray(passages)) return 0;
+        
+        return passages.reduce((total, passage) => {
+            if (!passage.instructionGroups) return total;
+            const passageQuestions = passage.instructionGroups.reduce((subTotal: any, group: any) => {
+                return subTotal + (group.questions?.length || 0);
+            }, 0);
+            return total + passageQuestions;
+        }, 0);
+    } catch (e) {
+        console.error("Failed to parse questions for count:", e);
+        return 0;
+    }
+}
+
+
 export default function ReadingSelectionPage() {
   const { logout } = useAuth()
   const router = useRouter()
@@ -78,21 +99,6 @@ export default function ReadingSelectionPage() {
   const startExam = (questionId: number) => {
     router.push(`/examinee/reading/exam/${questionId}`)
   }
-
-  // Helper function to safely get the number of questions
-  const getQuestionCount = (questionsData: any) => {
-    try {
-      if (typeof questionsData === 'string') {
-        const parsed = JSON.parse(questionsData);
-        return Array.isArray(parsed) ? parsed.length : 0;
-      } else if (Array.isArray(questionsData)) {
-        return questionsData.length;
-      }
-    } catch (e) {
-      console.error("Failed to parse questions JSON", e);
-    }
-    return 0;
-  };
 
   return (
     <ProtectedRoute>
@@ -169,9 +175,7 @@ export default function ReadingSelectionPage() {
           ) : (
             <div className="grid gap-6">
               {filteredQuestions.map((question) => {
-                // FIX: Use the helper function to get the correct count
-                const questionCount = getQuestionCount(question.questions);
-
+                const questionCount = getTotalQuestionCount(question);
                 return (
                   <Card key={question.id} className="hover:shadow-lg transition-shadow">
                     <CardHeader>
@@ -183,7 +187,7 @@ export default function ReadingSelectionPage() {
                           <div>
                             <CardTitle className="text-xl">{question.title}</CardTitle>
                             <CardDescription className="mt-1">
-                              Reading comprehension with {questionCount} questions
+                              A full reading test with 3 passages and {questionCount} questions.
                             </CardDescription>
                           </div>
                         </div>
@@ -194,19 +198,8 @@ export default function ReadingSelectionPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Passage Preview:</p>
-                          <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1">
-                            {question.passage.substring(0, 200)}...
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Questions: {questionCount}</p>
-                        </div>
-                        <div className="flex justify-end">
-                          <Button onClick={() => startExam(question.id)}>Start Exam</Button>
-                        </div>
+                      <div className="flex justify-end">
+                        <Button onClick={() => startExam(question.id)}>Start Exam</Button>
                       </div>
                     </CardContent>
                   </Card>
