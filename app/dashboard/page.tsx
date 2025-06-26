@@ -62,7 +62,7 @@ export default function DashboardPage() {
                 <CardDescription>Create and manage exam questions and monitor student progress</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" variant="outline" onClick={() => setShowTeacherModal(true)}>
+                <Button className="w-full" onClick={() => setShowTeacherModal(true)}>
                   Select Teacher
                 </Button>
               </CardContent>

@@ -63,7 +63,7 @@ export default function TeacherPage() {
                 <CardDescription>Edit, delete, or view existing question sets</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" variant="outline">
+                <Button className="w-full">
                   Manage Questions
                 </Button>
               </CardContent>
@@ -78,7 +78,7 @@ export default function TeacherPage() {
                 <CardDescription>Review and manage examinee exam submissions</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" variant="secondary">
+                <Button className="w-full">
                   View Submissions
                 </Button>
               </CardContent>
