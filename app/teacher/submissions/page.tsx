@@ -36,26 +36,27 @@ export default function SubmissionsPage() {
   const { logout } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
-  
+
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [dateFilter, setDateFilter] = useState("all")
 
-  useEffect(() => {
-    const fetchSubmissions = async () => {
-      try {
-        setLoading(true)
-        const response = await fetch("/api/submissions")
-        if (!response.ok) throw new Error("Failed to fetch submissions")
-        const data = await response.json()
-        setSubmissions(data.submissions || [])
-      } catch (error) {
-        toast({ title: "Error", description: "Could not fetch submissions.", variant: "destructive" })
-      } finally {
-        setLoading(false)
-      }
+  const fetchSubmissions = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch("/api/submissions")
+      if (!response.ok) throw new Error("Failed to fetch submissions")
+      const data = await response.json()
+      setSubmissions(data.submissions || [])
+    } catch (error) {
+      toast({ title: "Error", description: "Could not fetch submissions.", variant: "destructive" })
+    } finally {
+      setLoading(false)
     }
+  }
+
+  useEffect(() => {
     fetchSubmissions()
   }, [toast])
 
@@ -67,9 +68,7 @@ export default function SubmissionsPage() {
                             submission.exam_title.toLowerCase().includes(searchTermLower);
 
       if (dateFilter === "all") return matchesSearch;
-      
-      // FIX: Explicitly parse the database time string as UTC to prevent timezone errors.
-      // SQLite format is 'YYYY-MM-DD HH:MM:SS'. We convert it to ISO format 'YYYY-MM-DDTHH:MM:SSZ'.
+
       const submissionDate = new Date(submission.submitted_at.replace(' ', 'T') + 'Z');
       const now = new Date();
       let matchesDate = false;
@@ -112,13 +111,43 @@ export default function SubmissionsPage() {
     try {
       const response = await fetch(`/api/submissions/${id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error("Failed to delete submission");
-      
+
       setSubmissions(prev => prev.filter(s => s.id !== id));
       toast({ title: "Success", description: "Submission deleted successfully." });
     } catch (error) {
       toast({ title: "Error", description: "Could not delete submission.", variant: "destructive" });
     }
   }
+
+  const handleDeleteAll = async () => {
+    try {
+      const response = await fetch(`/api/submissions`, { method: 'DELETE' });
+      if (!response.ok) throw new Error("Failed to delete all submissions");
+
+      setSubmissions([]);
+      toast({ title: "Success", description: "All submissions have been deleted." });
+    } catch (error) {
+      toast({ title: "Error", description: "Could not delete all submissions.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteByExaminee = async (examineeId: string) => {
+    try {
+        const response = await fetch(`/api/submissions/examinee/${examineeId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Failed to delete submissions for this examinee.");
+        }
+
+        fetchSubmissions();
+        toast({ title: "Success", description: `All submissions for student ID ${examineeId} deleted.` });
+    } catch (error) {
+        toast({ title: "Error", description: (error as Error).message, variant: "destructive" });
+    }
+  };
 
   const getBadgeVariant = (examType: string) => {
     switch (examType) {
@@ -150,7 +179,29 @@ export default function SubmissionsPage() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Card>
             <CardHeader>
-              <CardTitle>All Submissions</CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle>All Submissions</CardTitle>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive">
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete All Submissions
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete ALL submissions from ALL students and remove their files.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDeleteAll}>Delete All Submissions</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -183,14 +234,37 @@ export default function SubmissionsPage() {
                   {Object.keys(groupedAndFilteredSubmissions).length > 0 ? (
                     Object.entries(groupedAndFilteredSubmissions).map(([examineeId, group]) => (
                       <AccordionItem value={examineeId} key={examineeId}>
-                        <AccordionTrigger>
-                          <div className="flex items-center gap-2">
-                            <User className="h-5 w-5 text-gray-600" />
-                            <span className="font-semibold">{group.examinee_name}</span>
-                            <span className="text-gray-500">(ID: {examineeId})</span>
-                            <Badge variant="outline">{group.submissions.length} submission(s)</Badge>
-                          </div>
-                        </AccordionTrigger>
+                        <div className="flex items-center w-full">
+                            <AccordionTrigger className="flex-1">
+                                <div className="flex items-center gap-2">
+                                <User className="h-5 w-5 text-gray-600" />
+                                <span className="font-semibold">{group.examinee_name}</span>
+                                <span className="text-gray-500">(ID: {examineeId})</span>
+                                <Badge variant="outline">{group.submissions.length} submission(s)</Badge>
+                                </div>
+                            </AccordionTrigger>
+                            <div className="pr-4">
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700" onClick={(e) => e.stopPropagation()}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Delete all for {group.examinee_name}?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This will permanently delete all {group.submissions.length} submissions for this student and remove their folder. This action cannot be undone.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDeleteByExaminee(examineeId)}>Yes, Delete All</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
+                        </div>
                         <AccordionContent>
                           <Table>
                             <TableHeader>

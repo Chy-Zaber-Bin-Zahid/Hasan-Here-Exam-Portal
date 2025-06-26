@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
-import { getExamSubmissions } from "@/lib/database"
+import { getExamSubmissions, deleteAllExamSubmissions } from "@/lib/database"
+import { deleteAllExamineeFolders } from "@/lib/file-storage";
 export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const submissions = getExamSubmissions()
@@ -8,5 +10,16 @@ export async function GET() {
   } catch (error) {
     console.error("Error fetching exam submissions:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+export async function DELETE() {
+  try {
+    deleteAllExamSubmissions();
+    deleteAllExamineeFolders();
+    return NextResponse.json({ success: true, message: "All submissions deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting all submissions:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,4 +1,4 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, rmdirSync } from "fs"
+import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, rmdirSync, rmSync } from "fs"
 import { join, dirname } from "path"
 import { randomUUID } from "crypto"
 
@@ -116,7 +116,6 @@ export function deleteAudioFile(filename: string): boolean {
   }
 }
 
-// NEW: Function to delete an image file
 export function deleteImageFile(filename: string): boolean {
   try {
     const imageDir = join(STORAGE_DIR, "writing_images");
@@ -143,7 +142,6 @@ export function savePDFFile(
   examineeId: string,
   examTitle: string,
 ): { filename: string; path: string; fullPath: string } {
-  // Create the exam type folder: storage/name_id/writing|listening|reading/
   const examTypeFolderPath = createExamTypeFolder(examineeName, examineeId, examType)
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
@@ -178,15 +176,12 @@ export function getPDFFile(
 
 export function deleteSubmissionAndCleanUp(pdfPath: string): boolean {
   try {
-    // pdfPath from DB is relative, e.g., 'storage/name_id/examType/filename.pdf'
     const fullPath = join(process.cwd(), pdfPath);
 
     if (existsSync(fullPath)) {
-      // 1. Delete the PDF file
       unlinkSync(fullPath);
       console.log(`🗑️ Deleted submission PDF: ${fullPath}`);
 
-      // 2. Try to clean up empty parent directories
       const examTypeDir = dirname(fullPath);
       if (readdirSync(examTypeDir).length === 0) {
         rmdirSync(examTypeDir);
@@ -200,7 +195,7 @@ export function deleteSubmissionAndCleanUp(pdfPath: string): boolean {
       }
       return true;
     }
-    return false; // File did not exist
+    return false;
   } catch (error) {
     console.error("❌ Error deleting submission and cleaning up:", error);
     return false;
@@ -212,14 +207,52 @@ export function listExamineeFolders(): string[] {
   ensureDirectories()
   try {
     const fs = require("fs")
+    const teacherAssetFolders = ["teacher_audio_uploads", "writing_images"]; // Define folders to exclude
     return fs.readdirSync(STORAGE_DIR).filter((item: string) => {
       const itemPath = join(STORAGE_DIR, item)
-      return fs.statSync(itemPath).isDirectory() && item.includes("_")
+      // Ensure it's a directory and NOT one of the protected teacher asset folders.
+      return fs.statSync(itemPath).isDirectory() && !teacherAssetFolders.includes(item)
     })
   } catch (error) {
+    console.error("Error listing examinee folders:", error);
     return []
   }
 }
+
+export function deleteAllExamineeFolders(): boolean {
+    ensureDirectories();
+    try {
+        const examineeFolders = listExamineeFolders();
+        for (const folder of examineeFolders) {
+            const folderPath = join(STORAGE_DIR, folder);
+            rmSync(folderPath, { recursive: true, force: true });
+            console.log(`🗑️ Deleted examinee folder: ${folderPath}`);
+        }
+        return true;
+    } catch (error) {
+        console.error("❌ Error deleting all examinee folders:", error);
+        return false;
+    }
+}
+
+export function deleteExamineeFolder(examineeName: string, examineeId: string): boolean {
+    ensureDirectories();
+    try {
+        const folderName = `${examineeName}_${examineeId}`;
+        const folderPath = join(STORAGE_DIR, folderName);
+        if (existsSync(folderPath)) {
+            rmSync(folderPath, { recursive: true, force: true });
+            console.log(`🗑️ Deleted examinee folder: ${folderPath}`);
+            return true;
+        }
+        console.log(`⚠️ Examinee folder not found for deletion: ${folderPath}`);
+        return false; // Folder did not exist
+    } catch (error) {
+        console.error(`❌ Error deleting examinee folder for ${examineeName}_${examineeId}:`, error);
+        return false;
+    }
+}
+
 
 // List exam submissions for an examinee
 export function listExamineeSubmissions(
@@ -243,7 +276,6 @@ export function listExamineeSubmissions(
   try {
     const fs = require("fs")
 
-    // Check each exam type folder
     const examTypes = ["writing", "listening", "reading"] as const
 
     for (const examType of examTypes) {

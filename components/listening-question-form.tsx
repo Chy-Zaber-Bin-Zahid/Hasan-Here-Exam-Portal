@@ -180,9 +180,6 @@ export function ListeningQuestionForm() {
 
           {audioUrl && (
             <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-              <Button type="button" variant="ghost" size="sm" onClick={togglePlayPause}>
-                {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              </Button>
               <audio ref={audioRef} src={audioUrl} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} className="flex-1" controls />
             </div>
           )}
