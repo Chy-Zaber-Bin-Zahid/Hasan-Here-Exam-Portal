@@ -4,12 +4,12 @@
   "private": true,
   "description": "Hasan Here Exam Portal",
   "author": "Zaber47",
-  "main": "main.js",
+  "type": "module",
+  "main": "main/background.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "node server.js",
-    "electron:dev": "electron .",
+    "dev": "nextron",
+    "build": "nextron build",
+    "start": "nextron start",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
@@ -48,6 +48,8 @@
     "clsx": "^2.1.1",
     "cmdk": "latest",
     "date-fns": "4.1.0",
+    "electron-serve": "^2.1.1",
+    "electron-store": "^10.1.0",
     "embla-carousel-react": "latest",
     "input-otp": "latest",
     "jsonwebtoken": "latest",
@@ -55,6 +57,7 @@
     "lucide-react": "^0.454.0",
     "next": "14.2.16",
     "next-themes": "latest",
+    "nextron": "^9.5.0",
     "react": "^18",
     "react-day-picker": "latest",
     "react-dom": "^18",
@@ -79,50 +82,36 @@
     "typescript": "^5"
   },
   "build": {
-    "icon": "public/icon.ico",
     "appId": "com.hasan.examportal",
     "productName": "Hasan Here Exam Portal",
-    "npmRebuild": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main/**",
+      "renderer/**",
+      "node_modules/**",
+      "package.json"
+    ],
     "asarUnpack": [
-      "server.js",
-      "exam_portal.db",
-      "storage/**/*",
-      "node_modules/**/*",
-      ".next/**/*"
+      "node_modules/**"
     ],
-    "extraResources": [
-      {
-        "from": ".next",
-        "to": ".next",
-        "filter": ["**/*"]
-      }
-    ],
-  "files": [
-    "node_modules/**/*",
-    "public/**/*",
-    "server.js",
-    "main.js",
-    "package.json",
-    "exam_portal.db",
-    "storage/**/*",
-    ".next/**/*"
-  ],
     "win": {
-      "icon": "public/icon.ico",
+      "icon": "renderer/public/icon.ico",
       "target": "nsis"
     },
     "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     },
     "mac": {
+      "icon": "renderer/public/icon.icns",
       "target": "dmg"
     },
     "linux": {
+      "icon": "renderer/public/icon.png",
       "target": "AppImage"
-    },
-    "directories": {
-      "output": "dist"
     }
   }
 }
