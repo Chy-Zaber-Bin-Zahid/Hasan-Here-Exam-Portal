@@ -35,17 +35,16 @@ function createServer() {
   let serverPath, nextAppDir;
 
   if (app.isPackaged) {
-    // Unpacked server.js file
-    serverPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'server.js');
-    // .next directory is copied to resources/.next
-    nextAppDir = path.join(process.resourcesPath, 'app.asar.unpacked');
+    // With asar disabled, the app root is inside the 'app' folder
+    nextAppDir = path.join(process.resourcesPath, 'app');
+    serverPath = path.join(nextAppDir, 'server.js');
   } else {
+    // Development paths remain the same
     serverPath = path.join(__dirname, 'server.js');
     nextAppDir = __dirname;
   }
 
-  console.log('Starting server at:', serverPath);
-  console.log('NEXT_APP_DIR:', nextAppDir);
+  console.log('Starting Next.js server for app directory:', nextAppDir);
 
   if (!fs.existsSync(serverPath)) {
     console.error('server.js not found at:', serverPath);
@@ -53,12 +52,8 @@ function createServer() {
     return;
   }
 
-  serverProcess = spawn('node', [serverPath], {
-    cwd: path.dirname(serverPath),
-    env: {
-      ...process.env,
-      NEXT_APP_DIR: nextAppDir,
-    },
+  serverProcess = spawn('node', [serverPath, nextAppDir], {
+    cwd: nextAppDir, // Set the working directory to the app root
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 

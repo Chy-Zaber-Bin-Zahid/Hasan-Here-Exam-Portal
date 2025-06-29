@@ -1,13 +1,12 @@
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
-const path = require('path');
 
 // Production mode
 const dev = false;
 
 // Use NEXT_APP_DIR env variable or fallback to current directory
-const appDir = process.env.NEXT_APP_DIR || __dirname;
+const appDir = process.argv[2] || __dirname;
 
 console.log('Starting Next.js server in directory:', appDir);
 

@@ -68,52 +68,44 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.27.7",
+    "@babel/preset-env": "^7.27.2",
     "@types/better-sqlite3": "^7.6.8",
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "babel-loader": "^10.0.0",
     "electron": "^36.5.0",
     "electron-builder": "^26.0.12",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "typescript": "^5",
+    "webpack": "^5.99.9",
+    "webpack-cli": "^6.0.1"
   },
   "build": {
     "icon": "public/icon.ico",
     "appId": "com.hasan.examportal",
     "productName": "Hasan Here Exam Portal",
     "npmRebuild": false,
-    "asarUnpack": [
-      "server.js",
-      "exam_portal.db",
-      "storage/**/*",
-      "node_modules/**/*",
-      ".next/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": ".next",
-        "to": ".next",
-        "filter": ["**/*"]
-      }
-    ],
+  "asar": false,
   "files": [
+    ".next/**/*",
     "node_modules/**/*",
     "public/**/*",
     "server.js",
     "main.js",
     "package.json",
     "exam_portal.db",
-    "storage/**/*",
-    ".next/**/*"
+    "storage/**/*"
   ],
     "win": {
       "icon": "public/icon.ico",
       "target": "nsis"
     },
     "nsis": {
-    "oneClick": false,
-    "allowToChangeInstallationDirectory": true
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     },
     "mac": {
       "target": "dmg"
