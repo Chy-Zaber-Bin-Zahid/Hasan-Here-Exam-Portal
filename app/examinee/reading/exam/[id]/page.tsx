@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Clock, BookOpen, CheckCircle, User, Highlighter } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 
 // --- Interfaces for Data Structures ---
 interface Question {
@@ -77,6 +78,7 @@ export default function ReadingExamPage() {
     
     const [highlights, setHighlights] = useState<any[][]>([[], [], []]);
     const [activePassageIndex, setActivePassageIndex] = useState(0);
+    const [panelLayout, setPanelLayout] = useState<number[]>([50, 50]);
     
     const timerRef = useRef<NodeJS.Timeout | null>(null)
     
@@ -201,7 +203,6 @@ export default function ReadingExamPage() {
         });
     };
     
-    // --- FINAL, CORRECTED PDF Generation Function ---
     const generatePDF = async () => {
         const { jsPDF } = await import("jspdf");
         const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -335,7 +336,7 @@ export default function ReadingExamPage() {
 
                 <main className="flex-1 min-h-0">
                     <Tabs defaultValue="passage-0" onValueChange={(val) => setActivePassageIndex(parseInt(val.split('-')[1]))} className="h-full flex flex-col">
-                        <TabsList className="grid w-full grid-cols-3">
+                        <TabsList className="grid w-full grid-cols-3 mt-[26px] px-[16.5px]">
                             {examData.passages.map((_, index) => (
                                 <TabsTrigger key={index} value={`passage-${index}`}>Passage {index + 1}</TabsTrigger>
                             ))}
@@ -351,61 +352,70 @@ export default function ReadingExamPage() {
                             
                             return (
                                 <TabsContent key={pIndex} value={`passage-${pIndex}`} className="flex-1 min-h-0">
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full p-4">
-                                        <Card className="flex flex-col overflow-y-auto">
-                                            <CardHeader>
-                                                <CardTitle>{passage.title}</CardTitle>
-                                                <CardDescription className="text-xs pt-1">
-                                                    Select text and right-click to highlight. Click on a highlight to remove it.
-                                                </CardDescription>
-                                            </CardHeader>
-                                            <CardContent 
-                                                onContextMenu={handleContextMenu}
-                                                className="flex-1 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed"
-                                            >
-                                               <HighlightedPassage 
-                                                    passageText={passage.passage} 
-                                                    highlights={highlights[pIndex]}
-                                                    onRemoveHighlight={handleRemoveHighlight}
-                                                />
-                                            </CardContent>
-                                        </Card>
-                                        <Card className="flex flex-col overflow-y-auto">
-                                            <CardHeader><CardTitle>Questions</CardTitle></CardHeader>
-                                            <CardContent className="flex-1 overflow-y-auto space-y-4">
-                                                {passage.instructionGroups.map((group, gIndex) => {
-                                                    let questionCounterInGroup = 0;
-                                                    if (gIndex > 0) {
-                                                        for (let i = 0; i < gIndex; i++) {
-                                                            questionCounterInGroup += passage.instructionGroups[i].questions.length;
+                                    <ResizablePanelGroup 
+                                        direction="horizontal" 
+                                        className="h-full p-4"
+                                        onLayout={(sizes: number[]) => setPanelLayout(sizes)}
+                                    >
+                                        <ResizablePanel defaultSize={panelLayout[0]}>
+                                            <Card className="flex flex-col overflow-y-auto h-full">
+                                                <CardHeader>
+                                                    <CardTitle>{passage.title}</CardTitle>
+                                                    <CardDescription className="text-xs pt-1">
+                                                        Select text and right-click to highlight. Click on a highlight to remove it.
+                                                    </CardDescription>
+                                                </CardHeader>
+                                                <CardContent 
+                                                    onContextMenu={handleContextMenu}
+                                                    className="flex-1 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed break-words"
+                                                >
+                                                   <HighlightedPassage 
+                                                        passageText={passage.passage} 
+                                                        highlights={highlights[pIndex]}
+                                                        onRemoveHighlight={handleRemoveHighlight}
+                                                    />
+                                                </CardContent>
+                                            </Card>
+                                        </ResizablePanel>
+                                        <ResizableHandle withHandle />
+                                        <ResizablePanel defaultSize={panelLayout[1]}>
+                                            <Card className="flex flex-col overflow-y-auto h-full">
+                                                <CardHeader><CardTitle>Questions</CardTitle></CardHeader>
+                                                <CardContent className="flex-1 overflow-y-auto space-y-4">
+                                                    {passage.instructionGroups.map((group, gIndex) => {
+                                                        let questionCounterInGroup = 0;
+                                                        if (gIndex > 0) {
+                                                            for (let i = 0; i < gIndex; i++) {
+                                                                questionCounterInGroup += passage.instructionGroups[i].questions.length;
+                                                            }
                                                         }
-                                                    }
-                                                    return (
-                                                    <div key={gIndex} className="p-3 bg-gray-100 rounded-md">
-                                                        <p className="italic text-sm mb-3 whitespace-pre-wrap">{group.instructionText}</p>
-                                                        {group.questions.map((q, qIndex) => {
-                                                            const globalQIndex = passageQuestionOffset + questionCounterInGroup + qIndex;
-                                                            const questionNumberForDisplay = questionCounterInGroup + qIndex + 1;
-                                                            return (
-                                                                <div key={qIndex} className="space-y-2 mb-4">
-                                                                    <Label htmlFor={`q-${globalQIndex}`} className="flex items-start gap-2">
-                                                                        <span className="font-bold">{questionNumberForDisplay}.</span> 
-                                                                        <span className="flex-1 whitespace-pre-wrap">{q.text}</span>
-                                                                    </Label>
-                                                                    <Textarea
-                                                                        id={`q-${globalQIndex}`}
-                                                                        value={answers[globalQIndex] || ''}
-                                                                        onChange={(e) => handleAnswerChange(globalQIndex, e.target.value)}
-                                                                        spellCheck="false"
-                                                                    />
-                                                                </div>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                )})}
-                                            </CardContent>
-                                        </Card>
-                                    </div>
+                                                        return (
+                                                        <div key={gIndex} className="p-3 bg-gray-100 rounded-md">
+                                                            <p className="font-bold text-sm mb-3 whitespace-pre-wrap break-words">{group.instructionText}</p>
+                                                            {group.questions.map((q, qIndex) => {
+                                                                const globalQIndex = passageQuestionOffset + questionCounterInGroup + qIndex;
+                                                                const questionNumberForDisplay = questionCounterInGroup + qIndex + 1;
+                                                                return (
+                                                                    <div key={qIndex} className="space-y-2 mb-4">
+                                                                        <Label htmlFor={`q-${globalQIndex}`} className="flex items-start gap-2">
+                                                                            <span className="font-bold">{questionNumberForDisplay}.</span> 
+                                                                            <span className="flex-1 whitespace-pre-wrap break-words">{q.text}</span>
+                                                                        </Label>
+                                                                        <Textarea
+                                                                            id={`q-${globalQIndex}`}
+                                                                            value={answers[globalQIndex] || ''}
+                                                                            onChange={(e) => handleAnswerChange(globalQIndex, e.target.value)}
+                                                                            spellCheck="false"
+                                                                        />
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    )})}
+                                                </CardContent>
+                                            </Card>
+                                        </ResizablePanel>
+                                    </ResizablePanelGroup>
                                 </TabsContent>
                             )
                         })}

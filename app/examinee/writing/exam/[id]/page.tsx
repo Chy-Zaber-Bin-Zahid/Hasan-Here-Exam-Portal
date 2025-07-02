@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Clock, FileText, User, Image as ImageIcon } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 
 interface WritingQuestion {
   id: number
@@ -43,8 +44,8 @@ export default function WritingExamPage() {
   const [examineeId, setExamineeId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [panelLayout, setPanelLayout] = useState<number[]>([50, 50]);
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-  // FIX: Add state to track the active tab for the dynamic title
   const [activeTab, setActiveTab] = useState("task1");
 
   useEffect(() => {
@@ -324,67 +325,85 @@ export default function WritingExamPage() {
             </TabsList>
             
             <TabsContent value="task1" className="mt-4 flex-1 min-h-0">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-                    <Card className="flex flex-col overflow-y-auto">
-                        <CardHeader><CardTitle>Task 1: Prompt & Image</CardTitle></CardHeader>
-                        <CardContent className="flex-1 space-y-4 overflow-y-auto p-4">
-                            {examData.imageUrl && <img src={examData.imageUrl} alt="Task 1 visual aid" className="rounded-lg border mb-4"/>}
-                            <div className="p-4 bg-gray-100 rounded-md border">
-                                <p className="text-sm whitespace-pre-wrap">{examData.task1_prompt}</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card className="flex flex-col">
-                        <CardHeader><CardTitle>Your Answer for Task 1</CardTitle></CardHeader>
-                        <CardContent className="flex-1 flex flex-col p-4 pt-0 overflow-y-auto">
-                             <div className="text-right text-sm text-gray-500 pb-2 pr-1">{countWords(answers.task1)} words</div>
-                             <Textarea
-                                value={answers.task1}
-                                onChange={(e) => setAnswers(prev => ({ ...prev, task1: e.target.value }))}
-                                placeholder="Write your response for Task 1 here..."
-                                className="flex-1 w-full text-base resize-none"
-                                spellCheck="false"
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="off"
-                            />
-                        </CardContent>
-                    </Card>
-                </div>
+                <ResizablePanelGroup 
+                    direction="horizontal" 
+                    className="h-full"
+                    onLayout={(sizes: number[]) => setPanelLayout(sizes)}
+                >
+                    <ResizablePanel defaultSize={panelLayout[0]}>
+                        <Card className="flex flex-col overflow-y-auto h-full">
+                            <CardHeader><CardTitle>Task 1: Prompt & Image</CardTitle></CardHeader>
+                            <CardContent className="flex-1 space-y-4 overflow-y-auto p-4">
+                                {examData.imageUrl && <img src={examData.imageUrl} alt="Task 1 visual aid" className="rounded-lg border mb-4"/>}
+                                <div className="p-4 bg-gray-100 rounded-md border">
+                                    <p className="text-sm whitespace-pre-wrap break-words">{examData.task1_prompt}</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </ResizablePanel>
+                    <ResizableHandle withHandle />
+                    <ResizablePanel defaultSize={panelLayout[1]}>
+                        <Card className="flex flex-col h-full">
+                            <CardHeader><CardTitle>Your Answer for Task 1</CardTitle></CardHeader>
+                            <CardContent className="flex-1 flex flex-col p-4 pt-0 overflow-y-auto">
+                                 <div className="text-right text-sm text-gray-500 pb-2 pr-1">{countWords(answers.task1)} words</div>
+                                 <Textarea
+                                    value={answers.task1}
+                                    onChange={(e) => setAnswers(prev => ({ ...prev, task1: e.target.value }))}
+                                    placeholder="Write your response for Task 1 here..."
+                                    className="flex-1 w-full text-base resize-none"
+                                    spellCheck="false"
+                                    autoComplete="off"
+                                    autoCorrect="off"
+                                    autoCapitalize="off"
+                                />
+                            </CardContent>
+                        </Card>
+                    </ResizablePanel>
+                </ResizablePanelGroup>
             </TabsContent>
 
             <TabsContent value="task2" className="mt-4 flex-1 min-h-0">
-                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-                    <Card className="flex flex-col overflow-y-auto">
-                        <CardHeader><CardTitle>Task 2: Prompt & Instructions</CardTitle></CardHeader>
-                        <CardContent className="flex-1 space-y-4 overflow-y-auto p-4">
-                             <div className="p-4 bg-gray-100 rounded-md border">
-                                <p className="font-semibold mb-2">Prompt:</p>
-                                <p className="text-sm whitespace-pre-wrap">{examData.task2_prompt}</p>
-                            </div>
-                             <div className="p-4 bg-blue-50 rounded-md border border-blue-200">
-                                <p className="font-semibold mb-2 text-blue-800">Instructions:</p>
-                                <p className="text-sm whitespace-pre-wrap text-blue-700">{examData.task2_instructions}</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card className="flex flex-col">
-                        <CardHeader><CardTitle>Your Answer for Task 2</CardTitle></CardHeader>
-                         <CardContent className="flex-1 flex flex-col p-4 pt-0 overflow-y-auto">
-                             <div className="text-right text-sm text-gray-500 pb-2 pr-1">{countWords(answers.task2)} words</div>
-                             <Textarea
-                                value={answers.task2}
-                                onChange={(e) => setAnswers(prev => ({ ...prev, task2: e.target.value }))}
-                                placeholder="Write your response for Task 2 here..."
-                                className="flex-1 w-full text-base resize-none"
-                                spellCheck="false"
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="off"
-                            />
-                        </CardContent>
-                    </Card>
-                </div>
+                 <ResizablePanelGroup 
+                    direction="horizontal" 
+                    className="h-full"
+                    onLayout={(sizes: number[]) => setPanelLayout(sizes)}
+                 >
+                    <ResizablePanel defaultSize={panelLayout[0]}>
+                        <Card className="flex flex-col overflow-y-auto h-full">
+                            <CardHeader><CardTitle>Task 2: Prompt & Instructions</CardTitle></CardHeader>
+                            <CardContent className="flex-1 space-y-4 overflow-y-auto p-4">
+                                 <div className="p-4 bg-gray-100 rounded-md border">
+                                    <p className="font-semibold mb-2">Prompt:</p>
+                                    <p className="text-sm whitespace-pre-wrap break-words">{examData.task2_prompt}</p>
+                                </div>
+                                 <div className="p-4 bg-blue-50 rounded-md border border-blue-200">
+                                    <p className="font-semibold mb-2 text-blue-800">Instructions:</p>
+                                    <p className="text-sm whitespace-pre-wrap break-words">{examData.task2_instructions}</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </ResizablePanel>
+                    <ResizableHandle withHandle />
+                    <ResizablePanel defaultSize={panelLayout[1]}>
+                        <Card className="flex flex-col h-full">
+                            <CardHeader><CardTitle>Your Answer for Task 2</CardTitle></CardHeader>
+                             <CardContent className="flex-1 flex flex-col p-4 pt-0 overflow-y-auto">
+                                 <div className="text-right text-sm text-gray-500 pb-2 pr-1">{countWords(answers.task2)} words</div>
+                                 <Textarea
+                                    value={answers.task2}
+                                    onChange={(e) => setAnswers(prev => ({ ...prev, task2: e.target.value }))}
+                                    placeholder="Write your response for Task 2 here..."
+                                    className="flex-1 w-full text-base resize-none"
+                                    spellCheck="false"
+                                    autoComplete="off"
+                                    autoCorrect="off"
+                                    autoCapitalize="off"
+                                />
+                            </CardContent>
+                        </Card>
+                    </ResizablePanel>
+                </ResizablePanelGroup>
             </TabsContent>
          </Tabs>
         </main>
