@@ -29,15 +29,12 @@ export default function WritingSelectionPage() {
 
     setExamineeName(name)
 
-    // Load writing questions from database
     const loadQuestions = async () => {
       try {
-        console.log("🔍 Loading writing questions from database...")
         const response = await fetch("/api/writing-questions")
         if (response.ok) {
           const data = await response.json()
           const questions = Array.isArray(data) ? data : data.questions || []
-          console.log("✍️ Writing questions loaded from database:", questions.length)
           setWritingQuestions(questions)
         } else {
           console.error("Failed to load writing questions")
@@ -53,85 +50,39 @@ export default function WritingSelectionPage() {
   }, [router])
 
   const filteredQuestions = writingQuestions.filter((question) => {
-    // Search filter
     const matchesSearch = question.title.toLowerCase().includes(searchTerm.toLowerCase())
 
-    // Date filter
-    let matchesDate = true
-    if (dateFilter !== "all") {
-      const questionDate = new Date(question.createdAt || Date.now())
-      const now = new Date()
+    if (dateFilter === "all") return matchesSearch;
+    
+    if (!question.created_at) return false;
 
-      switch (dateFilter) {
-        case "today":
-          matchesDate = questionDate.toDateString() === now.toDateString()
-          break
-        case "week":
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-          matchesDate = questionDate >= weekAgo
-          break
-        case "month":
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-          matchesDate = questionDate >= monthAgo
-          break
-      }
+    const submissionDate = new Date(question.created_at.replace(' ', 'T') + 'Z');
+    const now = new Date();
+    let matchesDate = false;
+
+    switch (dateFilter) {
+      case "today":
+        matchesDate = submissionDate.getFullYear() === now.getFullYear() &&
+                      submissionDate.getMonth() === now.getMonth() &&
+                      submissionDate.getDate() === now.getDate();
+        break
+      case "week":
+        const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+        matchesDate = submissionDate >= weekAgo
+        break
+      case "month":
+        const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        matchesDate = submissionDate >= monthAgo
+        break
+      default:
+        matchesDate = true;
     }
 
     return matchesSearch && matchesDate
   })
 
   const startExam = (questionId: number) => {
-    // Create writing test folder structure
-    const folderData = JSON.parse(localStorage.getItem("examineeFolder") || "{}")
-    const currentTime = new Date().toISOString()
-
-    folderData.activeExams = folderData.activeExams || {}
-    folderData.activeExams.writing_test = {
-      questionId,
-      startTime: currentTime,
-      status: "in_progress",
-      createdAt: currentTime,
-    }
-
-    localStorage.setItem("examineeFolder", JSON.stringify(folderData))
-
-    // Navigate to exam
     router.push(`/examinee/writing/exam/${questionId}`)
-  }
-
-  if (writingQuestions.length === 0) {
-    return (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50">
-          <header className="bg-white shadow-sm border-b">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center py-4">
-                <div className="flex items-center gap-4">
-                  <Button variant="ghost" onClick={() => router.push("/examinee")}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back
-                  </Button>
-                  <h1 className="text-2xl font-bold text-gray-900">Writing Exams</h1>
-                </div>
-                <Button variant="outline" onClick={logout}>
-                  Logout
-                </Button>
-              </div>
-            </div>
-          </header>
-
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="text-center py-12">
-              <PenTool className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">No Writing Exams Available</h2>
-              <p className="text-gray-600">
-                There are currently no writing exams available. Please contact your teacher.
-              </p>
-            </div>
-          </main>
-        </div>
-      </ProtectedRoute>
-    )
   }
 
   return (
@@ -160,7 +111,6 @@ export default function WritingSelectionPage() {
             <p className="text-gray-600">Choose one of the available writing exams to begin</p>
           </div>
 
-          {/* Search and Filter Controls */}
           <div className="mb-6 bg-gray-50 p-4 rounded-lg">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
@@ -190,7 +140,6 @@ export default function WritingSelectionPage() {
               </div>
             </div>
 
-            {/* Results Summary */}
             <div className="mt-3 text-sm text-gray-600">
               Showing {filteredQuestions.length} of {writingQuestions.length} exams
             </div>
@@ -210,7 +159,15 @@ export default function WritingSelectionPage() {
             </div>
           ) : (
             <div className="grid gap-6">
-              {filteredQuestions.map((question) => (
+              {filteredQuestions.map((question) => {
+                let prompts = { task1: "Click to see prompt.", task2: "Click to see prompt."};
+                try {
+                    if (question.prompt) {
+                        prompts = JSON.parse(question.prompt);
+                    }
+                } catch {}
+
+                return (
                 <Card key={question.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -221,7 +178,7 @@ export default function WritingSelectionPage() {
                         <div>
                           <CardTitle className="text-xl">{question.title}</CardTitle>
                           <CardDescription className="mt-1">
-                            Writing examination with prompt and instructions
+                            A two-part writing examination.
                           </CardDescription>
                         </div>
                       </div>
@@ -234,9 +191,15 @@ export default function WritingSelectionPage() {
                   <CardContent>
                     <div className="space-y-3">
                       <div>
-                        <p className="text-sm font-medium text-gray-700">Prompt Preview:</p>
-                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1">
-                          {question.prompt.substring(0, 200)}...
+                        <p className="text-sm font-medium text-gray-700">Task 1 Preview:</p>
+                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1 line-clamp-2">
+                           {prompts.task1}
+                        </p>
+                      </div>
+                       <div>
+                        <p className="text-sm font-medium text-gray-700">Task 2 Preview:</p>
+                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1 line-clamp-2">
+                           {prompts.task2}
                         </p>
                       </div>
                       <div className="flex justify-end">
@@ -245,7 +208,7 @@ export default function WritingSelectionPage() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              )})}
             </div>
           )}
         </main>

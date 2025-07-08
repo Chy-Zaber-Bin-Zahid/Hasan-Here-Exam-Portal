@@ -367,3 +367,27 @@ export function getExamSubmissions(): ExamSubmission[] {
   const db = getDatabase()
   return db.prepare("SELECT * FROM exam_submissions ORDER BY submitted_at DESC").all() as ExamSubmission[]
 }
+
+export function deleteExamSubmission(id: number): boolean {
+  const db = getDatabase()
+  const result = db.prepare("DELETE FROM exam_submissions WHERE id = ?").run(id)
+  return result.changes > 0
+}
+
+export function deleteAllExamSubmissions(): boolean {
+    const db = getDatabase();
+    const result = db.prepare("DELETE FROM exam_submissions").run();
+    return result.changes > 0;
+}
+
+export function deleteSubmissionsByExamineeId(examineeId: string): boolean {
+    const db = getDatabase();
+    const result = db.prepare("DELETE FROM exam_submissions WHERE examinee_id = ?").run(examineeId);
+    return result.changes > 0;
+}
+
+export function getExamineeNameById(examineeId: string): string | null {
+    const db = getDatabase();
+    const result = db.prepare("SELECT examinee_name FROM exam_submissions WHERE examinee_id = ? LIMIT 1").get(examineeId) as { examinee_name: string } | undefined;
+    return result ? result.examinee_name : null;
+}

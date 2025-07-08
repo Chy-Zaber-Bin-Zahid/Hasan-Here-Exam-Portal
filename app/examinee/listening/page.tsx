@@ -29,15 +29,12 @@ export default function ListeningSelectionPage() {
 
     setExamineeName(name)
 
-    // Load listening questions from database
     const loadQuestions = async () => {
       try {
-        console.log("🔍 Loading listening questions from database...")
         const response = await fetch("/api/listening-questions")
         if (response.ok) {
           const data = await response.json()
           const questions = Array.isArray(data) ? data : data.questions || []
-          console.log("🎧 Listening questions loaded from database:", questions.length)
           setListeningQuestions(questions)
         } else {
           console.error("Failed to load listening questions")
@@ -53,13 +50,11 @@ export default function ListeningSelectionPage() {
   }, [router])
 
   const filteredQuestions = listeningQuestions.filter((question) => {
-    // Search filter
     const matchesSearch = question.title.toLowerCase().includes(searchTerm.toLowerCase())
 
-    // Date filter
     let matchesDate = true
     if (dateFilter !== "all") {
-      const questionDate = new Date(question.createdAt || Date.now())
+      const questionDate = new Date(question.created_at || Date.now())
       const now = new Date()
 
       switch (dateFilter) {
@@ -81,147 +76,22 @@ export default function ListeningSelectionPage() {
   })
 
   const startExam = (questionId: number) => {
-    // Create listening test folder structure
-    const folderData = JSON.parse(localStorage.getItem("examineeFolder") || "{}")
-    const currentTime = new Date().toISOString()
-
-    folderData.activeExams = folderData.activeExams || {}
-    folderData.activeExams.listening_test = {
-      questionId,
-      startTime: currentTime,
-      status: "in_progress",
-      createdAt: currentTime,
-    }
-
-    localStorage.setItem("examineeFolder", JSON.stringify(folderData))
-
-    // Navigate to exam
     router.push(`/examinee/listening/exam/${questionId}`)
   }
-
-  if (listeningQuestions.length === 0) {
-    return (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50">
-          <header className="bg-white shadow-sm border-b">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center py-4">
-                <div className="flex items-center gap-4">
-                  <Button variant="ghost" onClick={() => router.push("/examinee")}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back
-                  </Button>
-                  <h1 className="text-2xl font-bold text-gray-900">Listening Exams</h1>
-                </div>
-                <Button variant="outline" onClick={logout}>
-                  Logout
-                </Button>
-              </div>
-            </div>
-          </header>
-
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">Select a Listening Exam</h2>
-              <p className="text-gray-600">Choose one of the available listening exams to begin</p>
-            </div>
-
-            {/* Search and Filter Controls */}
-            <div className="mb-6 bg-gray-50 p-4 rounded-lg">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <Input
-                      placeholder="Search exams by title..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <div className="sm:w-48">
-                  <Select value={dateFilter} onValueChange={setDateFilter}>
-                    <SelectTrigger>
-                      <Filter className="w-4 h-4 mr-2" />
-                      <SelectValue placeholder="Filter by date" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Time</SelectItem>
-                      <SelectItem value="today">Today</SelectItem>
-                      <SelectItem value="week">Last Week</SelectItem>
-                      <SelectItem value="month">Last Month</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Results Summary */}
-              <div className="mt-3 text-sm text-gray-600">
-                Showing {filteredQuestions.length} of {listeningQuestions.length} exams
-              </div>
-            </div>
-
-            {filteredQuestions.length === 0 ? (
-              <div className="text-center py-12">
-                <Headphones className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  {listeningQuestions.length === 0 ? "No Listening Exams Available" : "No Exams Found"}
-                </h2>
-                <p className="text-gray-600">
-                  {listeningQuestions.length === 0
-                    ? "There are currently no listening exams available. Please contact your teacher."
-                    : "Try adjusting your search terms or date filter to find more exams."}
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-6">
-                {filteredQuestions.map((question) => (
-                  <Card key={question.id} className="hover:shadow-lg transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Headphones className="w-6 h-6 text-blue-600" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-xl">{question.title}</CardTitle>
-                            <CardDescription className="mt-1">
-                              Listening comprehension with {question.questions.length} questions
-                            </CardDescription>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <Clock className="w-4 h-4" />
-                          60 minutes
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Audio File:</p>
-                          <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1">
-                            {question.audioFileName} ({(question.audioSize / 1024 / 1024).toFixed(2)} MB)
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Questions: {question.questions.length}</p>
-                        </div>
-                        <div className="flex justify-end">
-                          <Button onClick={() => startExam(question.id)}>Start Exam</Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </main>
-        </div>
-      </ProtectedRoute>
-    )
-  }
+  
+  const getQuestionCount = (questionsData: any) => {
+    try {
+      if (typeof questionsData === 'string') {
+        const parsed = JSON.parse(questionsData);
+        return Array.isArray(parsed) ? parsed.length : 0;
+      } else if (Array.isArray(questionsData)) {
+        return questionsData.length;
+      }
+    } catch (e) {
+      console.error("Failed to parse questions JSON", e);
+    }
+    return 0;
+  };
 
   return (
     <ProtectedRoute>
@@ -249,7 +119,6 @@ export default function ListeningSelectionPage() {
             <p className="text-gray-600">Choose one of the available listening exams to begin</p>
           </div>
 
-          {/* Search and Filter Controls */}
           <div className="mb-6 bg-gray-50 p-4 rounded-lg">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
@@ -279,7 +148,6 @@ export default function ListeningSelectionPage() {
               </div>
             </div>
 
-            {/* Results Summary */}
             <div className="mt-3 text-sm text-gray-600">
               Showing {filteredQuestions.length} of {listeningQuestions.length} exams
             </div>
@@ -299,45 +167,54 @@ export default function ListeningSelectionPage() {
             </div>
           ) : (
             <div className="grid gap-6">
-              {filteredQuestions.map((question) => (
-                <Card key={question.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Headphones className="w-6 h-6 text-blue-600" />
+              {filteredQuestions.map((question) => {
+                const questionCount = getQuestionCount(question.questions);
+                const displayName = question.audio_filename || question.audio_url?.split('/').pop() || 'Audio file not specified';
+                const audioSizeMB = (question.audio_size && typeof question.audio_size === 'number')
+                  ? `(${(question.audio_size / 1024 / 1024).toFixed(2)} MB)`
+                  : '';
+                
+                return (
+                  <Card key={question.id} className="hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                            <Headphones className="w-6 h-6 text-blue-600" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-xl">{question.title}</CardTitle>
+                            <CardDescription className="mt-1">
+                              Listening comprehension with {questionCount} questions
+                            </CardDescription>
+                          </div>
                         </div>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <Clock className="w-4 h-4" />
+                          60 minutes
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
                         <div>
-                          <CardTitle className="text-xl">{question.title}</CardTitle>
-                          <CardDescription className="mt-1">
-                            Listening comprehension with {question.questions.length} questions
-                          </CardDescription>
+                          <p className="text-sm font-medium text-gray-700">Audio File:</p>
+                          <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1 truncate">
+                            {displayName} {audioSizeMB}
+                          </p>
+                        </div>
+                        {/* FIX: This div was accidentally removed and has now been restored */}
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">Questions: {questionCount}</p>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button onClick={() => startExam(question.id)}>Start Exam</Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Clock className="w-4 h-4" />
-                        60 minutes
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Audio File:</p>
-                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1">
-                          {question.audioFileName} ({(question.audioSize / 1024 / 1024).toFixed(2)} MB)
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-700">Questions: {question.questions.length}</p>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button onClick={() => startExam(question.id)}>Start Exam</Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </main>

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-
+export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const sessionCookie = request.cookies.get("user-session")?.value

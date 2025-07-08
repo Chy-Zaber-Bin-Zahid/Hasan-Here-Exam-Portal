@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAudioFile } from "@/lib/file-storage"
-
+export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest, { params }: { params: { filename: string } }) {
   try {
     const audioBuffer = getAudioFile(params.filename)

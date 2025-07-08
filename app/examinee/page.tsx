@@ -65,13 +65,11 @@ export default function ExamineePage() {
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900">Welcome, {examineeName}</h2>
                   <p className="text-gray-600">Student ID: {examineeId}</p>
-                  <p className="text-sm text-gray-500">Exam Folder: {folderName}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Exam Guidelines */}
           <div className="mb-8 space-y-4">
             <Alert>
               <Info className="h-4 w-4" />
@@ -138,6 +136,20 @@ export default function ExamineePage() {
                 </CardContent>
               </Card>
             </div>
+            
+            <div className="pt-6 mt-6 border-t">
+               <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center">Video Instruction</h3>
+               <div className="relative h-0 bg-gray-200 rounded-lg overflow-hidden" style={{ paddingTop: '56.25%' }}>
+                 <iframe
+                    className="absolute top-0 left-0 w-full h-full"
+                    src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+                    title="Instructions for Candidates for Written Exams (Exams Office)"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                 ></iframe>
+               </div>
+            </div>
           </div>
 
           <div className="mb-6">
@@ -146,8 +158,9 @@ export default function ExamineePage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader className="text-center">
+            {/* FIX: Added flexbox classes to align content */}
+            <Card className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleModuleClick("Writing")}>
+              <CardHeader className="flex-grow text-center">
                 <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
                   <PenTool className="w-8 h-8 text-red-600" />
                 </div>
@@ -155,14 +168,14 @@ export default function ExamineePage() {
                 <CardDescription>Test your writing skills with essay and composition tasks</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" onClick={() => handleModuleClick("Writing")}>
+                <Button className="w-full">
                   Start Writing Module
                 </Button>
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader className="text-center">
+            <Card className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleModuleClick("Listening")}>
+              <CardHeader className="flex-grow text-center">
                 <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
                   <Headphones className="w-8 h-8 text-blue-600" />
                 </div>
@@ -170,14 +183,14 @@ export default function ExamineePage() {
                 <CardDescription>Improve your listening comprehension with audio exercises</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" onClick={() => handleModuleClick("Listening")}>
+                <Button className="w-full">
                   Start Listening Module
                 </Button>
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-              <CardHeader className="text-center">
+            <Card className="flex flex-col hover:shadow-lg transition-shadow cursor-pointer" onClick={() => handleModuleClick("Reading")}>
+              <CardHeader className="flex-grow text-center">
                 <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
                   <BookOpen className="w-8 h-8 text-green-600" />
                 </div>
@@ -185,7 +198,7 @@ export default function ExamineePage() {
                 <CardDescription>Enhance your reading comprehension with various texts</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" onClick={() => handleModuleClick("Reading")}>
+                <Button className="w-full">
                   Start Reading Module
                 </Button>
               </CardContent>

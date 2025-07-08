@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
+import { Eye, EyeOff } from "lucide-react" // Import icons
 
 interface AccessForm {
   password: string
@@ -19,6 +20,7 @@ export default function TeacherAccessPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false) // Add state for password visibility
 
   const {
     register,
@@ -28,9 +30,7 @@ export default function TeacherAccessPage() {
 
   const onSubmit = async (data: AccessForm) => {
     setIsLoading(true)
-
     const success = await verifyTeacherAccess(data.password)
-
     if (success) {
       toast({
         title: "Access granted",
@@ -44,7 +44,6 @@ export default function TeacherAccessPage() {
         variant: "destructive",
       })
     }
-
     setIsLoading(false)
   }
 
@@ -59,12 +58,22 @@ export default function TeacherAccessPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="password">Access Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter teacher access password"
-                {...register("password", { required: "Password is required" })}
-              />
+              {/* FIX: Wrap Input and Icon in a relative container */}
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"} // Dynamic type
+                  placeholder="Enter teacher access password"
+                  {...register("password", { required: "Password is required" })}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
               {errors.password && <p className="text-sm text-red-500">{errors.password.message}</p>}
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>

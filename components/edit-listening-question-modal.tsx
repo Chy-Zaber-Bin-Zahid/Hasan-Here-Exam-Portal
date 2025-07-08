@@ -2,15 +2,18 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Plus, Trash2, Play, Pause, Volume2 } from "lucide-react"
+import { Plus, X, Loader2 } from "lucide-react"
+
+interface Question {
+  text: string;
+}
 
 interface EditListeningQuestionModalProps {
   question: any
@@ -22,320 +25,228 @@ interface EditListeningQuestionModalProps {
 export function EditListeningQuestionModal({ question, open, onOpenChange, onSave }: EditListeningQuestionModalProps) {
   const { toast } = useToast()
   const [title, setTitle] = useState("")
-  const [questions, setQuestions] = useState<Array<{ text: string; options: string[]; correctAnswer: number }>>([])
+  const [questions, setQuestions] = useState<Question[]>([])
   const [audioFile, setAudioFile] = useState<File | null>(null)
-  const [audioUrl, setAudioUrl] = useState<string>("")
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null)
-  const [keepOriginalAudio, setKeepOriginalAudio] = useState(true)
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string>("")
+  const [isSaving, setIsSaving] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     if (question && open) {
-      setTitle(question.title)
-      setQuestions(question.questions || [])
-      setAudioUrl(question.audioUrl || "")
-      setKeepOriginalAudio(true)
-      setAudioFile(null)
+      setTitle(question.title);
+      setAudioFile(null);
+      setAudioPreviewUrl(question.audio_url || "");
+
+      let parsedQuestions: Question[] = [];
+      try {
+        if (typeof question.questions === 'string') {
+          parsedQuestions = JSON.parse(question.questions);
+        } else if (Array.isArray(question.questions)) {
+          parsedQuestions = question.questions;
+        }
+      } catch (error) {
+        console.error("Error parsing questions for editing:", error);
+        parsedQuestions = [];
+      }
+      
+      const sanitizedQuestions = parsedQuestions.map(q => ({ text: q.text || '' }));
+      setQuestions(sanitizedQuestions.length > 0 ? sanitizedQuestions : [{ text: "" }]);
     }
-  }, [question, open])
+  }, [question, open]);
+  
+  useEffect(() => {
+    if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.load();
+    }
+  }, [audioPreviewUrl])
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       if (file.type.startsWith("audio/")) {
-        setAudioFile(file)
-        setKeepOriginalAudio(false)
-        const url = URL.createObjectURL(file)
-        setAudioUrl(url)
-        toast({
-          title: "Audio uploaded",
-          description: `${file.name} has been selected for upload.`,
-        })
+        setAudioFile(file);
+        const localUrl = URL.createObjectURL(file);
+        setAudioPreviewUrl(localUrl);
       } else {
-        toast({
-          title: "Invalid file type",
-          description: "Please select an audio file.",
-          variant: "destructive",
-        })
+        toast({ title: "Invalid file type", description: "Please select an audio file.", variant: "destructive"})
       }
-    }
-  }
-
-  const toggleAudio = () => {
-    if (!audioUrl) return
-
-    if (currentAudio) {
-      if (isPlaying) {
-        currentAudio.pause()
-        setIsPlaying(false)
-      } else {
-        currentAudio.play()
-        setIsPlaying(true)
-      }
-    } else {
-      const audio = new Audio(audioUrl)
-      audio.addEventListener("ended", () => setIsPlaying(false))
-      audio.addEventListener("error", () => {
-        toast({
-          title: "Audio Error",
-          description: "Could not play the audio file.",
-          variant: "destructive",
-        })
-        setIsPlaying(false)
-      })
-      setCurrentAudio(audio)
-      audio.play()
-      setIsPlaying(true)
     }
   }
 
   const addQuestion = () => {
-    setQuestions([...questions, { text: "", options: ["", "", "", ""], correctAnswer: 0 }])
+    setQuestions([...questions, { text: "" }])
   }
 
   const removeQuestion = (index: number) => {
-    setQuestions(questions.filter((_, i) => i !== index))
-  }
-
-  const updateQuestion = (index: number, field: string, value: any) => {
-    const updated = [...questions]
-    if (field === "text") {
-      updated[index].text = value
-    } else if (field === "correctAnswer") {
-      updated[index].correctAnswer = value
+    if (questions.length > 1) {
+      setQuestions(questions.filter((_, i) => i !== index));
+    } else {
+      toast({
+        title: "Cannot Delete",
+        description: "At least one question is required.",
+        variant: "destructive",
+      });
     }
-    setQuestions(updated)
-  }
+  };
 
-  const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
+  const updateQuestionText = (index: number, value: string) => {
     const updated = [...questions]
-    updated[questionIndex].options[optionIndex] = value
+    updated[index].text = value
     setQuestions(updated)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a title.",
-        variant: "destructive",
-      })
+      toast({ title: "Validation Error", description: "Please enter a title.", variant: "destructive" })
       return
     }
 
-    if (questions.length === 0) {
-      toast({
-        title: "Validation Error",
-        description: "Please add at least one question.",
-        variant: "destructive",
-      })
+    const validQuestions = questions.filter((q) => q.text.trim() !== "");
+    if (validQuestions.length === 0) {
+      toast({ title: "Validation Error", description: "Please add at least one question.", variant: "destructive"})
       return
     }
+    
+    setIsSaving(true);
+    let finalAudioUrl = question.audio_url;
+    let finalAudioFilename = question.audio_filename;
+    let finalAudioSize = question.audio_size;
+    let oldAudioUrlToDelete = null;
+    
+    if (audioFile) {
+        try {
+            const formData = new FormData();
+            formData.append("audio", audioFile);
+            
+            const response = await fetch("/api/upload/audio", {
+                method: "POST",
+                body: formData,
+            });
 
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i]
-      if (!q.text.trim()) {
-        toast({
-          title: "Validation Error",
-          description: `Question ${i + 1} text is required.`,
-          variant: "destructive",
-        })
-        return
-      }
-      if (q.options.some((opt) => !opt.trim())) {
-        toast({
-          title: "Validation Error",
-          description: `All options for question ${i + 1} are required.`,
-          variant: "destructive",
-        })
-        return
-      }
+            const result = await response.json();
+            if (!result.success) throw new Error(result.error || 'Upload failed');
+            
+            const newServerPath = result.path;
+            
+            if (newServerPath !== question.audio_url) {
+                finalAudioUrl = newServerPath;
+                finalAudioFilename = audioFile.name;
+                finalAudioSize = audioFile.size;
+                oldAudioUrlToDelete = question.audio_url; 
+            }
+            
+            toast({ title: "New Audio Uploaded", description: `File ${result.originalName} saved.`});
+
+        } catch (error) {
+            console.error("Upload error on save:", error);
+            toast({ title: "Upload Failed", description: "Could not save the new audio file.", variant: "destructive" });
+            setIsSaving(false);
+            return;
+        }
     }
 
     const updatedQuestion = {
       ...question,
       title: title.trim(),
-      questions,
-      audioUrl: keepOriginalAudio ? question.audioUrl : audioUrl,
-      audioFileName: keepOriginalAudio ? question.audioFileName : audioFile?.name || question.audioFileName,
-      audioSize: keepOriginalAudio ? question.audioSize : audioFile?.size || question.audioSize,
+      questions: JSON.stringify(validQuestions),
+      audio_url: finalAudioUrl,
+      audio_filename: finalAudioFilename,
+      audio_size: finalAudioSize,
+      old_audio_url_to_delete: oldAudioUrlToDelete,
       updatedAt: new Date().toISOString(),
     }
 
     onSave(updatedQuestion)
+    setIsSaving(false);
     onOpenChange(false)
   }
 
-  const handleClose = () => {
-    if (currentAudio) {
-      currentAudio.pause()
-      setCurrentAudio(null)
+  // FIX: Create a helper to safely get the display name for the audio file
+  const getCurrentAudioDisplayName = () => {
+    // Prioritize the explicitly stored original filename
+    if (question.audio_filename) {
+      return question.audio_filename;
     }
-    setIsPlaying(false)
-    onOpenChange(false)
+    // Fallback for older records: extract from the URL
+    if (question.audio_url) {
+      return question.audio_url.split('/').pop();
+    }
+    // If no data is available
+    return 'No file';
   }
+
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Listening Question Set</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Title */}
           <div>
             <Label htmlFor="title">Title</Label>
-            <Input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Enter question set title"
-            />
+            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Enter question set title" />
           </div>
 
-          {/* Audio Section */}
           <div className="space-y-4">
             <Label>Audio File</Label>
-
-            {/* Current Audio Info */}
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-blue-900">Current Audio:</p>
-                  <p className="text-sm text-blue-700">{question?.audioFileName}</p>
-                  <p className="text-xs text-blue-600">
-                    {question?.audioSize ? `${(question.audioSize / 1024 / 1024).toFixed(2)} MB` : "Unknown size"}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleAudio}
-                  disabled={!audioUrl}
-                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
-                >
-                  {isPlaying ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-                  {isPlaying ? "Pause" : "Play"}
-                </Button>
-              </div>
+             <div className="p-4 bg-gray-100 border rounded-lg">
+                <p className="font-medium text-gray-800">Audio Preview</p>
+                <p className="text-sm text-gray-500 mb-2 truncate">
+                    {audioFile ? `New: ${audioFile.name}` : `Current: ${getCurrentAudioDisplayName()}`}
+                </p>
+                {audioPreviewUrl ? (
+                    <audio ref={audioRef} key={audioPreviewUrl} controls src={audioPreviewUrl} className="w-full" />
+                ) : <p className="text-sm text-gray-500">No audio available for preview.</p>}
             </div>
 
-            {/* New Audio Upload */}
             <div className="space-y-2">
-              <Label htmlFor="audio-upload">Upload New Audio (Optional)</Label>
-              <div className="flex items-center gap-4">
-                <Input id="audio-upload" type="file" accept="audio/*" onChange={handleAudioUpload} className="flex-1" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setKeepOriginalAudio(true)}
-                  className={keepOriginalAudio ? "bg-blue-100 border-blue-300" : ""}
-                >
-                  Keep Original
-                </Button>
-              </div>
-
-              {audioFile && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-green-900">New Audio Selected:</p>
-                      <p className="text-sm text-green-700">{audioFile.name}</p>
-                      <p className="text-xs text-green-600">{(audioFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleAudio}
-                      className="border-green-300 text-green-700 hover:bg-green-100"
-                    >
-                      <Volume2 className="w-4 h-4 mr-2" />
-                      Preview
-                    </Button>
-                  </div>
-                </div>
-              )}
+              <Label htmlFor="audio-upload">Upload New Audio to Replace</Label>
+              <Input id="audio-upload" type="file" accept="audio/*" onChange={handleAudioUpload} className="flex-1" />
             </div>
           </div>
 
-          {/* Questions */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <Label>Questions</Label>
-              <Button type="button" onClick={addQuestion} size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Question
-              </Button>
+              <Button type="button" onClick={addQuestion} variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Add Question</Button>
             </div>
-
-            {questions.map((question, qIndex) => (
-              <Card key={qIndex}>
-                <CardContent className="p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium">Question {qIndex + 1}</h4>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeQuestion(qIndex)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+            
+            {questions.map((q, qIndex) => (
+              <div key={qIndex} className="flex gap-2 items-start">
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-500 min-w-[80px]">Question {qIndex + 1}:</span>
+                    {questions.length > 1 && (
+                      <Button
+                        type="button"
+                        onClick={() => removeQuestion(qIndex)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 p-1 h-auto"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
-
-                  <div>
-                    <Label>Question Text</Label>
-                    <Textarea
-                      value={question.text}
-                      onChange={(e) => updateQuestion(qIndex, "text", e.target.value)}
-                      placeholder="Enter the question"
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Answer Options</Label>
-                    {question.options.map((option, oIndex) => (
-                      <div key={oIndex} className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name={`correct-${qIndex}`}
-                          checked={question.correctAnswer === oIndex}
-                          onChange={() => updateQuestion(qIndex, "correctAnswer", oIndex)}
-                          className="mt-1"
-                        />
-                        <Input
-                          value={option}
-                          onChange={(e) => updateOption(qIndex, oIndex, e.target.value)}
-                          placeholder={`Option ${oIndex + 1}`}
-                          className="flex-1"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
-            {questions.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                No questions added yet. Click "Add Question" to get started.
+                  <Textarea
+                    placeholder={`Enter question ${qIndex + 1} here...`}
+                    className="min-h-[80px]"
+                    value={q.text}
+                    onChange={(e) => updateQuestionText(qIndex, e.target.value)}
+                  />
+                </div>
               </div>
-            )}
+            ))}
           </div>
 
-          {/* Actions */}
           <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={handleSave}>
-              Save Changes
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" onClick={handleSave} disabled={isSaving}>
+                {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         </div>
