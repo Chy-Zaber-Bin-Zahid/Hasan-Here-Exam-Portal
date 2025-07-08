@@ -1,32 +1,35 @@
 "use client"
 
 import type React from "react"
-
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, Control } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { useState, useRef } from "react"
-import { Plus, Upload, Play, Pause, X, Loader2 } from "lucide-react"
+import { Plus, Upload, X, Loader2 } from "lucide-react"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 interface Question {
   text: string
 }
 
+interface InstructionGroup {
+  instructionText: string;
+  questions: Question[];
+}
+
 interface ListeningForm {
   title: string
-  questions: Question[]
+  instructionGroups: InstructionGroup[];
 }
 
 export function ListeningQuestionForm() {
   const { toast } = useToast()
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioUrl, setAudioUrl] = useState<string>("")
-  const [isPlaying, setIsPlaying] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const audioRef = useRef<HTMLAudioElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -38,16 +41,15 @@ export function ListeningQuestionForm() {
   } = useForm<ListeningForm>({
     defaultValues: {
       title: "",
-      questions: [{ text: "" }],
+      instructionGroups: [{ instructionText: "", questions: [{ text: "" }] }],
     },
   })
 
   const { fields, append, remove } = useFieldArray({
     control,
-    name: "questions",
+    name: "instructionGroups",
   })
 
-  // FIX: Reverted to only setting file state, not uploading immediately.
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
@@ -65,33 +67,27 @@ export function ListeningQuestionForm() {
     }
   }
 
-  const togglePlayPause = () => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause()
-      } else {
-        audioRef.current.play()
-      }
-    }
-  }
-
-  // FIX: Reverted to include the upload logic inside the final save handler.
   const onSubmit = async (data: ListeningForm) => {
     if (!audioFile) {
       toast({ title: "Audio file required", description: "Please upload an audio file before saving.", variant: "destructive" })
       return
     }
 
-    const validQuestions = data.questions.filter((q) => q.text.trim() !== "");
-    if (validQuestions.length === 0) {
-      toast({ title: "No questions provided", description: "Please add at least one question.", variant: "destructive"})
+    const validInstructionGroups = data.instructionGroups
+      .map(group => ({
+        ...group,
+        questions: group.questions.filter(q => q.text.trim() !== "")
+      }))
+      .filter(group => group.instructionText.trim() !== "" && group.questions.length > 0);
+
+    if (validInstructionGroups.length === 0) {
+      toast({ title: "No questions provided", description: "Please add at least one instruction group with one question.", variant: "destructive" })
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      // Step 1: Upload the audio file to get the server path
       const formData = new FormData()
       formData.append("audio", audioFile)
       const uploadResponse = await fetch("/api/upload/audio", {
@@ -102,10 +98,9 @@ export function ListeningQuestionForm() {
       if (!uploadResult.success) {
         throw new Error(uploadResult.error || "Failed to upload audio");
       }
-      
+
       const serverAudioPath = uploadResult.path;
 
-      // Step 2: Save the question data with the new audio path
       const response = await fetch("/api/listening-questions", {
         method: "POST",
         headers: {
@@ -114,10 +109,7 @@ export function ListeningQuestionForm() {
         body: JSON.stringify({
           title: data.title,
           audio_url: serverAudioPath,
-          audio_filename: audioFile.name,
-          audio_size: audioFile.size,
-          text: "", 
-          questions: JSON.stringify(validQuestions),
+          questions: JSON.stringify(validInstructionGroups),
         }),
       })
 
@@ -129,7 +121,7 @@ export function ListeningQuestionForm() {
           description: `The question set has been saved to the database successfully.`,
         })
 
-        reset({ title: "", questions: [{ text: "" }]});
+        reset({ title: "", instructionGroups: [{ instructionText: "", questions: [{ text: "" }] }] });
         setAudioFile(null);
         setAudioUrl("");
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -138,19 +130,9 @@ export function ListeningQuestionForm() {
       }
     } catch (error) {
       console.error("Save error:", error)
-      toast({ title: "Save failed", description: "Failed to save to the database. Please try again.", variant: "destructive"})
+      toast({ title: "Save failed", description: "Failed to save to the database. Please try again.", variant: "destructive" })
     } finally {
       setIsSubmitting(false)
-    }
-  }
-
-  const addQuestion = () => {
-    append({ text: "" })
-  }
-
-  const removeQuestion = (index: number) => {
-    if (fields.length > 1) {
-      remove(index)
     }
   }
 
@@ -180,33 +162,49 @@ export function ListeningQuestionForm() {
 
           {audioUrl && (
             <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-              <audio ref={audioRef} src={audioUrl} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} className="flex-1" controls />
+              <audio src={audioUrl} controls className="flex-1" />
             </div>
           )}
         </div>
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label>Questions</Label>
-            <Button type="button" onClick={addQuestion} variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Add Question</Button>
+        <div className="space-y-4 rounded-md border p-4 bg-gray-50">
+          <div className="flex justify-between items-center">
+            <Label className="font-semibold">Instructions & Questions</Label>
+            <Button type="button" onClick={() => append({ instructionText: "", questions: [{ text: "" }] })} variant="outline" size="sm">
+              <Plus className="w-4 h-4 mr-2" /> Add Instruction Group
+            </Button>
           </div>
-
-          {fields.map((field, index) => (
-            <div key={field.id} className="flex gap-2 items-start">
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-500 min-w-[80px]">Question {index + 1}:</span>
-                  {fields.length > 1 && (
-                    <Button type="button" onClick={() => removeQuestion(index)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700 p-1 h-auto">
-                      <X className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-                <Textarea placeholder={`Enter question ${index + 1} here...`} className="min-h-[80px]" {...register(`questions.${index}.text`)} />
-              </div>
-            </div>
-          ))}
+          <Accordion type="multiple" defaultValue={["instruction-0"]} className="w-full space-y-4">
+            {fields.map((item, index) => (
+              <AccordionItem value={`instruction-${index}`} key={item.id} className="border rounded-lg bg-white shadow-sm">
+                <AccordionTrigger className="px-6 py-4 text-lg hover:no-underline">
+                  <div className="flex justify-between w-full items-center">
+                    <span>Instruction Group {index + 1}</span>
+                    {fields.length > 1 && (
+                      <Button type="button" onClick={() => remove(index)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700">
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-6 pb-6 pt-0">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor={`instructionGroups.${index}.instructionText`}>Instruction Text</Label>
+                      <Textarea
+                        id={`instructionGroups.${index}.instructionText`}
+                        placeholder="e.g., 'Listen to the conversation and answer questions 1-5.'"
+                        {...register(`instructionGroups.${index}.instructionText` as const, { required: "Instruction text is required." })}
+                      />
+                    </div>
+                    <QuestionArray control={control} instructionIndex={index} register={register} />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
+
 
         <Button type="submit" className="w-full" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -216,3 +214,47 @@ export function ListeningQuestionForm() {
     </div>
   )
 }
+
+interface QuestionArrayProps {
+  instructionIndex: number;
+  control: Control<ListeningForm>;
+  register: any;
+}
+
+const QuestionArray = ({ instructionIndex, control, register }: QuestionArrayProps) => {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `instructionGroups.${instructionIndex}.questions`,
+  });
+
+  return (
+    <div className="space-y-3 pl-6 border-l-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">Questions</Label>
+        <Button type="button" onClick={() => append({ text: "" })} variant="outline" size="sm">
+          <Plus className="w-4 h-4 mr-2" /> Add Question
+        </Button>
+      </div>
+
+      {fields.map((item, questionIndex) => (
+        <div key={item.id} className="flex gap-2 items-start">
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-500 min-w-[80px]">Question {questionIndex + 1}:</span>
+              {fields.length > 1 && (
+                <Button type="button" onClick={() => remove(questionIndex)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700 p-1 h-auto">
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            <Textarea
+              placeholder={`Enter text for question ${questionIndex + 1} here...`}
+              className="min-h-[60px]"
+              {...register(`instructionGroups.${instructionIndex}.questions.${questionIndex}.text` as const)}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};

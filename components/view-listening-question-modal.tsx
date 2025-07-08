@@ -3,6 +3,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 interface ViewListeningQuestionModalProps {
   question: any
@@ -13,22 +14,20 @@ interface ViewListeningQuestionModalProps {
 export function ViewListeningQuestionModal({ question, open, onOpenChange }: ViewListeningQuestionModalProps) {
   if (!question) return null
 
-  // Safely parse questions from JSON string
-  let parsedQuestions = []
+  let parsedInstructionGroups = []
   try {
     if (typeof question.questions === "string") {
-      parsedQuestions = JSON.parse(question.questions)
+      parsedInstructionGroups = JSON.parse(question.questions)
     } else if (Array.isArray(question.questions)) {
-      parsedQuestions = question.questions
+      parsedInstructionGroups = question.questions
     }
   } catch (error) {
     console.error("Error parsing questions:", error)
-    parsedQuestions = []
+    parsedInstructionGroups = []
   }
 
-  // Ensure parsedQuestions is always an array
-  if (!Array.isArray(parsedQuestions)) {
-    parsedQuestions = []
+  if (!Array.isArray(parsedInstructionGroups)) {
+    parsedInstructionGroups = []
   }
 
   return (
@@ -47,9 +46,8 @@ export function ViewListeningQuestionModal({ question, open, onOpenChange }: Vie
             <CardContent>
               <div className="bg-gray-50 p-4 rounded-lg space-y-3">
                 <p className="text-sm font-medium">
-                  Filename: {question.audioFileName || question.audio_url?.split('/').pop() || "No audio file"}
+                  Filename: {question.audio_url?.split('/').pop() || "No audio file"}
                 </p>
-                {/* FIX: Added an audio player */}
                 {question.audio_url ? (
                   <audio controls src={question.audio_url} className="w-full">
                     Your browser does not support the audio element.
@@ -57,34 +55,39 @@ export function ViewListeningQuestionModal({ question, open, onOpenChange }: Vie
                 ) : (
                   <p className="text-sm text-muted-foreground">No audio attached.</p>
                 )}
-                {question.text && (
-                  <p className="text-sm mt-2 pt-3 border-t">
-                    <strong>Description:</strong> {question.text}
-                  </p>
-                )}
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Questions ({parsedQuestions.length})</CardTitle>
+              <CardTitle className="text-lg">Instructions & Questions</CardTitle>
             </CardHeader>
             <CardContent>
-              {parsedQuestions.length > 0 ? (
-                <div className="space-y-3">
-                  {parsedQuestions.map((q: any, index: number) => (
-                    <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere">
-                        <span className="font-medium">{index + 1}.</span>{" "}
-                        {q.text || q.question || `Question ${index + 1}`}
-                      </p>
-                    </div>
+              {parsedInstructionGroups.length > 0 ? (
+                <Accordion type="single" collapsible className="w-full">
+                  {parsedInstructionGroups.map((group: any, gIndex: number) => (
+                    <AccordionItem value={`group-${gIndex}`} key={gIndex}>
+                      <AccordionTrigger className="text-base">Instruction Group {gIndex + 1}</AccordionTrigger>
+                      <AccordionContent>
+                        <p className="text-sm italic text-gray-600 mb-4 p-3 bg-blue-50 rounded-md border border-blue-200 whitespace-pre-wrap">
+                          {group.instructionText}
+                        </p>
+                        <ul className="space-y-3 pl-2">
+                          {group.questions?.map((q: any, qIndex: number) => (
+                            <li key={qIndex} className="text-sm flex items-start gap-2">
+                              <span className="font-bold text-gray-500">{qIndex + 1}.</span>
+                              <span className="flex-1 whitespace-pre-wrap">{q.text}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </AccordionContent>
+                    </AccordionItem>
                   ))}
-                </div>
+                </Accordion>
               ) : (
                 <div className="text-center py-8 text-gray-500">
-                  No questions available for this listening exercise.
+                  No instructions or questions available for this listening exercise.
                 </div>
               )}
             </CardContent>

@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect, useRef } from "react"
+import { useForm, useFieldArray, Control } from "react-hook-form"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,16 @@ interface Question {
   text: string;
 }
 
+interface InstructionGroup {
+  instructionText: string;
+  questions: Question[];
+}
+
+interface ListeningForm {
+  title: string;
+  instructionGroups: InstructionGroup[];
+}
+
 interface EditListeningQuestionModalProps {
   question: any
   open: boolean
@@ -24,40 +34,59 @@ interface EditListeningQuestionModalProps {
 
 export function EditListeningQuestionModal({ question, open, onOpenChange, onSave }: EditListeningQuestionModalProps) {
   const { toast } = useToast()
-  const [title, setTitle] = useState("")
-  const [questions, setQuestions] = useState<Question[]>([])
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string>("")
   const [isSaving, setIsSaving] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    reset,
+    control,
+  } = useForm<ListeningForm>();
+
+  const { fields: instructionFields, append: appendInstruction, remove: removeInstruction } = useFieldArray({
+    control,
+    name: "instructionGroups",
+  });
+
+
   useEffect(() => {
     if (question && open) {
-      setTitle(question.title);
       setAudioFile(null);
       setAudioPreviewUrl(question.audio_url || "");
 
-      let parsedQuestions: Question[] = [];
+      let parsedInstructionGroups: InstructionGroup[] = [];
       try {
         if (typeof question.questions === 'string') {
-          parsedQuestions = JSON.parse(question.questions);
+          parsedInstructionGroups = JSON.parse(question.questions);
         } else if (Array.isArray(question.questions)) {
-          parsedQuestions = question.questions;
+          parsedInstructionGroups = question.questions;
         }
       } catch (error) {
         console.error("Error parsing questions for editing:", error);
-        parsedQuestions = [];
+        parsedInstructionGroups = [];
       }
-      
-      const sanitizedQuestions = parsedQuestions.map(q => ({ text: q.text || '' }));
-      setQuestions(sanitizedQuestions.length > 0 ? sanitizedQuestions : [{ text: "" }]);
+
+      const sanitizedInstructionGroups = parsedInstructionGroups.map(group => ({
+        instructionText: group.instructionText || '',
+        questions: Array.isArray(group.questions) ? group.questions.map(q => ({ text: q.text || '' })) : [{ text: '' }]
+      }));
+
+
+      reset({
+        title: question.title,
+        instructionGroups: sanitizedInstructionGroups.length > 0 ? sanitizedInstructionGroups : [{ instructionText: "", questions: [{ text: "" }] }],
+      });
     }
-  }, [question, open]);
-  
+  }, [question, open, reset]);
+
   useEffect(() => {
     if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.load();
+      audioRef.current.pause();
+      audioRef.current.load();
     }
   }, [audioPreviewUrl])
 
@@ -69,91 +98,62 @@ export function EditListeningQuestionModal({ question, open, onOpenChange, onSav
         const localUrl = URL.createObjectURL(file);
         setAudioPreviewUrl(localUrl);
       } else {
-        toast({ title: "Invalid file type", description: "Please select an audio file.", variant: "destructive"})
+        toast({ title: "Invalid file type", description: "Please select an audio file.", variant: "destructive" })
       }
     }
   }
 
-  const addQuestion = () => {
-    setQuestions([...questions, { text: "" }])
-  }
-
-  const removeQuestion = (index: number) => {
-    if (questions.length > 1) {
-      setQuestions(questions.filter((_, i) => i !== index));
-    } else {
-      toast({
-        title: "Cannot Delete",
-        description: "At least one question is required.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const updateQuestionText = (index: number, value: string) => {
-    const updated = [...questions]
-    updated[index].text = value
-    setQuestions(updated)
-  }
-
-  const handleSave = async () => {
-    if (!title.trim()) {
+  const handleSave = async (data: ListeningForm) => {
+    if (!data.title.trim()) {
       toast({ title: "Validation Error", description: "Please enter a title.", variant: "destructive" })
       return
     }
 
-    const validQuestions = questions.filter((q) => q.text.trim() !== "");
-    if (validQuestions.length === 0) {
-      toast({ title: "Validation Error", description: "Please add at least one question.", variant: "destructive"})
+    const validInstructionGroups = data.instructionGroups
+      .map(group => ({
+        ...group,
+        questions: group.questions.filter(q => q.text.trim() !== "")
+      }))
+      .filter(group => group.instructionText.trim() !== "" && group.questions.length > 0);
+
+    if (validInstructionGroups.length === 0) {
+      toast({ title: "Validation Error", description: "Please add at least one instruction with one question.", variant: "destructive" })
       return
     }
-    
+
     setIsSaving(true);
     let finalAudioUrl = question.audio_url;
-    let finalAudioFilename = question.audio_filename;
-    let finalAudioSize = question.audio_size;
-    let oldAudioUrlToDelete = null;
-    
+
     if (audioFile) {
-        try {
-            const formData = new FormData();
-            formData.append("audio", audioFile);
-            
-            const response = await fetch("/api/upload/audio", {
-                method: "POST",
-                body: formData,
-            });
+      try {
+        const formData = new FormData();
+        formData.append("audio", audioFile);
 
-            const result = await response.json();
-            if (!result.success) throw new Error(result.error || 'Upload failed');
-            
-            const newServerPath = result.path;
-            
-            if (newServerPath !== question.audio_url) {
-                finalAudioUrl = newServerPath;
-                finalAudioFilename = audioFile.name;
-                finalAudioSize = audioFile.size;
-                oldAudioUrlToDelete = question.audio_url; 
-            }
-            
-            toast({ title: "New Audio Uploaded", description: `File ${result.originalName} saved.`});
+        const response = await fetch("/api/upload/audio", {
+          method: "POST",
+          body: formData,
+        });
 
-        } catch (error) {
-            console.error("Upload error on save:", error);
-            toast({ title: "Upload Failed", description: "Could not save the new audio file.", variant: "destructive" });
-            setIsSaving(false);
-            return;
-        }
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || 'Upload failed');
+
+        finalAudioUrl = result.path;
+
+        toast({ title: "New Audio Uploaded", description: `File ${result.originalName} saved.` });
+
+      } catch (error) {
+        console.error("Upload error on save:", error);
+        toast({ title: "Upload Failed", description: "Could not save the new audio file.", variant: "destructive" });
+        setIsSaving(false);
+        return;
+      }
     }
 
     const updatedQuestion = {
       ...question,
-      title: title.trim(),
-      questions: JSON.stringify(validQuestions),
+      title: data.title.trim(),
+      questions: JSON.stringify(validInstructionGroups),
       audio_url: finalAudioUrl,
-      audio_filename: finalAudioFilename,
-      audio_size: finalAudioSize,
-      old_audio_url_to_delete: oldAudioUrlToDelete,
       updatedAt: new Date().toISOString(),
     }
 
@@ -162,17 +162,10 @@ export function EditListeningQuestionModal({ question, open, onOpenChange, onSav
     onOpenChange(false)
   }
 
-  // FIX: Create a helper to safely get the display name for the audio file
   const getCurrentAudioDisplayName = () => {
-    // Prioritize the explicitly stored original filename
-    if (question.audio_filename) {
-      return question.audio_filename;
-    }
-    // Fallback for older records: extract from the URL
     if (question.audio_url) {
       return question.audio_url.split('/').pop();
     }
-    // If no data is available
     return 'No file';
   }
 
@@ -184,22 +177,22 @@ export function EditListeningQuestionModal({ question, open, onOpenChange, onSav
           <DialogTitle>Edit Listening Question Set</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <form onSubmit={handleSubmit(handleSave)} className="space-y-6">
           <div>
             <Label htmlFor="title">Title</Label>
-            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Enter question set title" />
+            <Input id="title" {...register("title")} placeholder="Enter question set title" />
           </div>
 
           <div className="space-y-4">
             <Label>Audio File</Label>
-             <div className="p-4 bg-gray-100 border rounded-lg">
-                <p className="font-medium text-gray-800">Audio Preview</p>
-                <p className="text-sm text-gray-500 mb-2 truncate">
-                    {audioFile ? `New: ${audioFile.name}` : `Current: ${getCurrentAudioDisplayName()}`}
-                </p>
-                {audioPreviewUrl ? (
-                    <audio ref={audioRef} key={audioPreviewUrl} controls src={audioPreviewUrl} className="w-full" />
-                ) : <p className="text-sm text-gray-500">No audio available for preview.</p>}
+            <div className="p-4 bg-gray-100 border rounded-lg">
+              <p className="font-medium text-gray-800">Audio Preview</p>
+              <p className="text-sm text-gray-500 mb-2 truncate">
+                {audioFile ? `New: ${audioFile.name}` : `Current: ${getCurrentAudioDisplayName()}`}
+              </p>
+              {audioPreviewUrl ? (
+                <audio ref={audioRef} key={audioPreviewUrl} controls src={audioPreviewUrl} className="w-full" />
+              ) : <p className="text-sm text-gray-500">No audio available for preview.</p>}
             </div>
 
             <div className="space-y-2">
@@ -210,47 +203,68 @@ export function EditListeningQuestionModal({ question, open, onOpenChange, onSav
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label>Questions</Label>
-              <Button type="button" onClick={addQuestion} variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Add Question</Button>
+              <Label>Instructions & Questions</Label>
+              <Button type="button" onClick={() => appendInstruction({ instructionText: '', questions: [{ text: '' }] })} variant="outline" size="sm"><Plus className="w-4 h-4 mr-2" />Add Instruction</Button>
             </div>
-            
-            {questions.map((q, qIndex) => (
-              <div key={qIndex} className="flex gap-2 items-start">
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500 min-w-[80px]">Question {qIndex + 1}:</span>
-                    {questions.length > 1 && (
-                      <Button
-                        type="button"
-                        onClick={() => removeQuestion(qIndex)}
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-500 hover:text-red-700 p-1 h-auto"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                  <Textarea
-                    placeholder={`Enter question ${qIndex + 1} here...`}
-                    className="min-h-[80px]"
-                    value={q.text}
-                    onChange={(e) => updateQuestionText(qIndex, e.target.value)}
-                  />
+
+            {instructionFields.map((item, instructionIndex) => (
+              <div key={item.id} className="p-4 border rounded-md space-y-4">
+                <div className="flex justify-between items-center">
+                  <Label>Instruction Group {instructionIndex + 1}</Label>
+                  {instructionFields.length > 1 && <Button type="button" onClick={() => removeInstruction(instructionIndex)} variant="ghost" size="sm" className="text-red-500 hover:text-red-700"><X className="w-4 h-4" /></Button>}
                 </div>
+                <Textarea placeholder="Instruction text..." {...register(`instructionGroups.${instructionIndex}.instructionText`)} />
+                <QuestionArray instructionIndex={instructionIndex} control={control} register={register} />
               </div>
             ))}
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="button" onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {isSaving ? 'Saving...' : 'Save Changes'}
+            <Button type="submit" disabled={isSaving}>
+              {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   )
 }
+
+interface QuestionArrayProps {
+  instructionIndex: number;
+  control: Control<ListeningForm>;
+  register: any;
+}
+const QuestionArray = ({ instructionIndex, control, register }: QuestionArrayProps) => {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `instructionGroups.${instructionIndex}.questions`,
+  });
+
+  return (
+    <div className="space-y-3 pl-6 border-l-2">
+      <div className="flex items-center justify-between">
+        <Label className="text-sm font-medium">Questions</Label>
+        <Button type="button" onClick={() => append({ text: "" })} variant="outline" size="sm">
+          <Plus className="w-4 h-4 mr-2" /> Add Question
+        </Button>
+      </div>
+
+      {fields.map((item, questionIndex) => (
+        <div key={item.id} className="flex gap-2 items-start">
+          <div className="flex-1">
+            <Label htmlFor={`question-text-${questionIndex}`} className="sr-only">Question {questionIndex + 1}</Label>
+            <Textarea id={`question-text-${questionIndex}`} placeholder={`Question ${questionIndex + 1}...`} className="min-h-[60px]" {...register(`instructionGroups.${instructionIndex}.questions.${questionIndex}.text`)} />
+          </div>
+          {fields.length > 1 && (
+            <Button type="button" onClick={() => remove(questionIndex)} variant="ghost" size="icon" className="text-red-500 hover:text-red-700 shrink-0 mt-1">
+              <X className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
