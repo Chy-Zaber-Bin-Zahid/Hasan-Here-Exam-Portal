@@ -13,7 +13,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { title, audio_url, text, questions } = await request.json()
+    const { title, audio_url, questions } = await request.json()
 
     if (!title || !audio_url || !questions) {
       return NextResponse.json({ error: "Title, audio URL, and questions are required" }, { status: 400 })
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     console.log("💾 Creating listening question:", { title, audio_url })
 
-    const newQuestion = createListeningQuestion(title, audio_url, text || "", questions)
+    const newQuestion = createListeningQuestion(title, audio_url, "", questions)
 
     console.log("✅ Listening question created with ID:", newQuestion.id)
 

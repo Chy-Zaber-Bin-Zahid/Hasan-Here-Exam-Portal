@@ -10,6 +10,31 @@ import { ArrowLeft, Headphones, Clock, Search, Filter } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+const getTotalQuestionCount = (question: any): number => {
+    if (!question || !question.questions) return 0;
+    try {
+        const instructionGroups = JSON.parse(question.questions);
+        if (!Array.isArray(instructionGroups)) return 0;
+
+        return instructionGroups.reduce((total, group) => {
+            return total + (group.questions?.length || 0);
+        }, 0);
+    } catch (e) {
+        console.error("Failed to parse listening questions for count:", e);
+        return 0;
+    }
+}
+
+const getInstructionGroupCount = (question: any): number => {
+    if (!question || !question.questions) return 0;
+    try {
+        const instructionGroups = JSON.parse(question.questions);
+        return Array.isArray(instructionGroups) ? instructionGroups.length : 0;
+    } catch (e) {
+        return 0;
+    }
+}
+
 export default function ListeningSelectionPage() {
   const { logout } = useAuth()
   const router = useRouter()
@@ -78,20 +103,6 @@ export default function ListeningSelectionPage() {
   const startExam = (questionId: number) => {
     router.push(`/examinee/listening/exam/${questionId}`)
   }
-  
-  const getQuestionCount = (questionsData: any) => {
-    try {
-      if (typeof questionsData === 'string') {
-        const parsed = JSON.parse(questionsData);
-        return Array.isArray(parsed) ? parsed.length : 0;
-      } else if (Array.isArray(questionsData)) {
-        return questionsData.length;
-      }
-    } catch (e) {
-      console.error("Failed to parse questions JSON", e);
-    }
-    return 0;
-  };
 
   return (
     <ProtectedRoute>
@@ -168,12 +179,13 @@ export default function ListeningSelectionPage() {
           ) : (
             <div className="grid gap-6">
               {filteredQuestions.map((question) => {
-                const questionCount = getQuestionCount(question.questions);
+                const totalQuestions = getTotalQuestionCount(question);
+                const instructionGroupsCount = getInstructionGroupCount(question);
                 const displayName = question.audio_filename || question.audio_url?.split('/').pop() || 'Audio file not specified';
                 const audioSizeMB = (question.audio_size && typeof question.audio_size === 'number')
                   ? `(${(question.audio_size / 1024 / 1024).toFixed(2)} MB)`
                   : '';
-                
+
                 return (
                   <Card key={question.id} className="hover:shadow-lg transition-shadow">
                     <CardHeader>
@@ -185,7 +197,7 @@ export default function ListeningSelectionPage() {
                           <div>
                             <CardTitle className="text-xl">{question.title}</CardTitle>
                             <CardDescription className="mt-1">
-                              Listening comprehension with {questionCount} questions
+                              An exam with {instructionGroupsCount} instruction group(s) and {totalQuestions} questions.
                             </CardDescription>
                           </div>
                         </div>
@@ -202,10 +214,6 @@ export default function ListeningSelectionPage() {
                           <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded mt-1 truncate">
                             {displayName} {audioSizeMB}
                           </p>
-                        </div>
-                        {/* FIX: This div was accidentally removed and has now been restored */}
-                        <div>
-                          <p className="text-sm font-medium text-gray-700">Questions: {questionCount}</p>
                         </div>
                         <div className="flex justify-end">
                           <Button onClick={() => startExam(question.id)}>Start Exam</Button>

@@ -4,11 +4,27 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { Edit, Trash2, Eye, Loader2, CalendarIcon, Search } from "lucide-react"
+import { Edit, Trash2, Eye, Loader2, CalendarIcon, Search, ListChecks } from "lucide-react"
 import { ViewListeningQuestionModal } from "@/components/view-listening-question-modal"
 import { EditListeningQuestionModal } from "@/components/edit-listening-question-modal"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+const getTotalQuestionCount = (question: any): number => {
+    if (!question || !question.questions) return 0;
+    try {
+        const instructionGroups = JSON.parse(question.questions);
+        if (!Array.isArray(instructionGroups)) return 0;
+
+        return instructionGroups.reduce((total, group) => {
+            return total + (group.questions?.length || 0);
+        }, 0);
+    } catch (e) {
+        console.error("Failed to parse listening questions for count:", e);
+        return 0;
+    }
+}
+
 
 export function ManageListeningQuestions() {
   const { toast } = useToast()
@@ -54,7 +70,6 @@ export function ManageListeningQuestions() {
         
         if (!question.created_at) return false;
 
-        // FIX: Implement robust date filtering logic
         const questionDate = new Date(question.created_at.replace(' ', 'T') + 'Z'); // Parse as UTC
         const now = new Date();
         let matchesDate = false;
@@ -191,13 +206,17 @@ export function ManageListeningQuestions() {
         </div>
       ) : (
         filteredQuestions.map((question) => {
-          const questionsData =
-            typeof question.questions === "string" ? JSON.parse(question.questions) : (question.questions || []);
-          
-          const displayName = question.audio_filename || question.audio_url?.split('/').pop() || 'No filename';
-          const displaySize = (question.audio_size && typeof question.audio_size === 'number') 
-              ? `(${(question.audio_size / 1024 / 1024).toFixed(2)} MB)` 
-              : '';
+            const totalQuestions = getTotalQuestionCount(question);
+            let instructionGroups: any[] = [];
+            try {
+                if (typeof question.questions === 'string') {
+                    instructionGroups = JSON.parse(question.questions);
+                } else if (Array.isArray(question.questions)) {
+                    instructionGroups = question.questions;
+                }
+            } catch(e) {}
+            
+            const displayName = question.audio_filename || question.audio_url?.split('/').pop() || 'No filename';
 
           return (
             <Card key={question.id}>
@@ -223,20 +242,17 @@ export function ManageListeningQuestions() {
               <CardContent>
                 <div className="space-y-2">
                   <p className="text-sm text-gray-600 truncate">
-                    <strong>Audio:</strong> {displayName} {displaySize}
+                    <strong>Audio:</strong> {displayName}
+                  </p>
+                  <p className="text-sm text-gray-600 flex items-center gap-2">
+                    <ListChecks className="w-4 h-4 text-blue-500" /> 
+                    <strong>{Array.isArray(instructionGroups) ? instructionGroups.length : 0} Instruction Group(s)</strong>
                   </p>
                   <p className="text-sm text-gray-600">
-                    <strong>Questions:</strong> {Array.isArray(questionsData) ? questionsData.length : 0}
+                    <strong>Total Questions:</strong> {totalQuestions}
                   </p>
-                  {Array.isArray(questionsData) && questionsData.length > 0 && (
-                    <div className="text-sm text-gray-600">
-                      <strong>First Question Preview:</strong>
-                      <div className="bg-gray-50 p-2 rounded mt-1 whitespace-pre-wrap text-xs break-words overflow-hidden">
-                        {(questionsData[0]?.text || '').substring(0, 100)}...
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-400">
+                  
+                  <p className="text-xs text-gray-400 pt-2">
                     Created: {question.created_at ? new Date(question.created_at).toLocaleDateString() : "Unknown"}
                   </p>
                 </div>

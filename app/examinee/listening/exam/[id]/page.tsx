@@ -5,18 +5,25 @@ import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { ProtectedRoute } from "@/components/protected-route"
 import { useAuth } from "@/components/auth-provider"
 import { useToast } from "@/hooks/use-toast"
-import { Clock, CheckCircle, AlertTriangle, Headphones, User, Play, Volume2 } from "lucide-react"
+import { Clock, CheckCircle, Headphones, User, Volume2 } from "lucide-react"
 
+interface Question {
+  text: string;
+}
+
+interface InstructionGroup {
+  instructionText: string;
+  questions: Question[];
+}
 interface ListeningQuestion {
   id: number
   title: string
   audio_url: string
-  questions: string | any[]
+  questions: InstructionGroup[]
   text?: string
   created_at: string
 }
@@ -57,7 +64,7 @@ export default function ListeningExamPage() {
       loadExamFromDatabase(examId)
     }
   }, [examId, router])
-  
+
   const loadExamFromDatabase = async (examId: string) => {
     try {
       setLoading(true);
@@ -78,21 +85,22 @@ export default function ListeningExamPage() {
         return;
       }
 
-      let parsedQuestions = []
+      let parsedInstructionGroups: InstructionGroup[] = []
       try {
         if (typeof question.questions === "string") {
-          parsedQuestions = JSON.parse(question.questions)
+          parsedInstructionGroups = JSON.parse(question.questions)
         } else if (Array.isArray(question.questions)) {
-          parsedQuestions = question.questions
+          parsedInstructionGroups = question.questions
         }
       } catch (error) {
         console.error("Error parsing questions:", error)
-        parsedQuestions = []
+        parsedInstructionGroups = []
       }
-      
-      const examWithParsedQuestions = { ...question, questions: parsedQuestions }
+
+      const examWithParsedQuestions = { ...question, questions: parsedInstructionGroups }
       setExamData(examWithParsedQuestions)
-      setAnswers(new Array(parsedQuestions.length).fill(""))
+      const totalQuestions = parsedInstructionGroups.reduce((acc, group) => acc + group.questions.length, 0);
+      setAnswers(new Array(totalQuestions).fill(""))
     } catch (error) {
       console.error("❌ Error loading listening exam from database:", error)
       toast({
@@ -115,7 +123,7 @@ export default function ListeningExamPage() {
         const audioDuration = Math.ceil(audio.duration);
         const extraTime = 120; // 2 minutes
         const totalExamTime = audioDuration + extraTime;
-        
+
         setTimeLeft(totalExamTime);
         setTotalDuration(totalExamTime);
       } else {
@@ -136,7 +144,7 @@ export default function ListeningExamPage() {
 
     audio.addEventListener('loadedmetadata', handleMetadata);
     audio.addEventListener('error', handleError);
-    
+
     if (audio.readyState >= 1 && timeLeft === null) {
       handleMetadata();
     }
@@ -145,15 +153,15 @@ export default function ListeningExamPage() {
       audio.removeEventListener('loadedmetadata', handleMetadata);
       audio.removeEventListener('error', handleError);
     };
-  }, [examData]);
+  }, [examData, timeLeft, toast]);
 
   const startTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    
+
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev === null || prev <= 1) {
-          if(timerRef.current) clearInterval(timerRef.current);
+          if (timerRef.current) clearInterval(timerRef.current);
           handleAutoSubmit()
           return 0
         }
@@ -172,16 +180,16 @@ export default function ListeningExamPage() {
 
   const handlePlayAudio = () => {
     if (audioRef.current && !audioPlayed) {
-        audioRef.current.play().catch(error => {
-            console.error("❌ Audio play error:", error)
-            toast({
-              title: "Audio Error",
-              description: "Could not play the audio file.",
-              variant: "destructive",
-            })
-        });
-        setAudioPlayed(true);
-        startTimer();
+      audioRef.current.play().catch(error => {
+        console.error("❌ Audio play error:", error)
+        toast({
+          title: "Audio Error",
+          description: "Could not play the audio file.",
+          variant: "destructive",
+        })
+      });
+      setAudioPlayed(true);
+      startTimer();
     }
   }
 
@@ -228,17 +236,22 @@ export default function ListeningExamPage() {
     addTextWithPageBreaks(`Student ID: ${examineeId}`);
     addTextWithPageBreaks(`Exam Title: ${examData?.title}`);
     yPosition += 10;
-    
-    addTextWithPageBreaks("Questions and Answers:", true);
 
-    (Array.isArray(examData?.questions) ? examData.questions : []).forEach((question: any, index: number) => {
-      const questionText = `Question ${index + 1}: ${question.text || ''}`;
-      const answerText = `Answer: ${answers[index] || "No answer provided"}`;
-      
-      addTextWithPageBreaks(questionText, true);
-      addTextWithPageBreaks(answerText);
-      yPosition += lineHeight;
+    addTextWithPageBreaks("Questions and Answers:", true);
+    let globalQuestionIndex = 0;
+    (examData?.questions || []).forEach((group) => {
+      addTextWithPageBreaks(`Instruction: ${group.instructionText}`, true);
+      group.questions.forEach((question) => {
+        const questionText = `Question ${globalQuestionIndex + 1}: ${question.text || ''}`;
+        const answerText = `Answer: ${answers[globalQuestionIndex] || "No answer provided"}`;
+
+        addTextWithPageBreaks(questionText, true);
+        addTextWithPageBreaks(answerText);
+        yPosition += lineHeight;
+        globalQuestionIndex++;
+      });
     });
+
 
     return doc;
   }
@@ -249,7 +262,7 @@ export default function ListeningExamPage() {
     try {
       if (timerRef.current) clearInterval(timerRef.current);
       if (audioRef.current) audioRef.current.pause();
-      
+
       const pdf = await generatePDF()
       const pdfBlob = pdf.output("blob")
 
@@ -281,15 +294,15 @@ export default function ListeningExamPage() {
       reader.readAsDataURL(pdfBlob);
     } catch (error) {
       console.error("Error submitting exam:", error);
-      toast({ title: "Submission error", description: "There was an error submitting your exam. Please try again.", variant: "destructive"});
+      toast({ title: "Submission error", description: "There was an error submitting your exam. Please try again.", variant: "destructive" });
       setIsSubmitting(false);
     }
   }
 
   const handleAutoSubmit = () => {
     if (!isSubmitting) {
-        toast({ title: "Time's up!", description: "Your exam will be automatically submitted.", variant: "destructive" });
-        handleSubmit();
+      toast({ title: "Time's up!", description: "Your exam will be automatically submitted.", variant: "destructive" });
+      handleSubmit();
     }
   }
 
@@ -309,27 +322,28 @@ export default function ListeningExamPage() {
       </ProtectedRoute>
     )
   }
-  
+
   if (!examData) {
-     return (
-        <ProtectedRoute>
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-              <div className="text-center">
-                <Headphones className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Not Found</h2>
-                <p className="text-gray-600">The exam could not be loaded. Please try again.</p>
-                <Button onClick={() => router.push("/examinee/listening")} className="mt-4">
-                  Back to Listening Exams
-                </Button>
-              </div>
-            </div>
-        </ProtectedRoute>
-     )
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <Headphones className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Exam Not Found</h2>
+            <p className="text-gray-600">The exam could not be loaded. Please try again.</p>
+            <Button onClick={() => router.push("/examinee/listening")} className="mt-4">
+              Back to Listening Exams
+            </Button>
+          </div>
+        </div>
+      </ProtectedRoute>
+    )
   }
-  
+
   const progressPercentage = (totalDuration && timeLeft) ? ((totalDuration - timeLeft) / totalDuration) * 100 : 0;
   const isTimeWarning = timeLeft !== null && timeLeft < 600;
   const answeredQuestions = answers.filter((answer) => answer.trim() !== "").length;
+  const totalQuestions = (examData?.questions || []).reduce((acc, group) => acc + group.questions.length, 0);
 
   return (
     <ProtectedRoute>
@@ -350,14 +364,14 @@ export default function ListeningExamPage() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                 <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-gray-500" />
                   <span className="text-sm text-gray-600">{examineeName}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <CheckCircle className="w-4 h-4" />
                   <span>
-                    {answeredQuestions}/{(examData?.questions || []).length} answered
+                    {answeredQuestions}/{totalQuestions} answered
                   </span>
                 </div>
                 <div
@@ -376,7 +390,7 @@ export default function ListeningExamPage() {
             </div>
           </div>
         </header>
-        
+
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-250px)]">
             <Card className="flex flex-col overflow-y-auto">
@@ -413,34 +427,47 @@ export default function ListeningExamPage() {
 
             <Card className="flex flex-col overflow-y-auto">
               <CardHeader>
-                <CardTitle>Questions ({(examData?.questions || []).length})</CardTitle>
+                <CardTitle>Questions ({totalQuestions})</CardTitle>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto">
                 <div className="space-y-6">
-                  {Array.isArray(examData?.questions) &&
-                    examData.questions.map((question: any, index: number) => (
-                      <div key={index} className="space-y-3">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center text-sm font-medium text-purple-600">
-                            {index + 1}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <label htmlFor={`question-${index}`} className="text-sm font-medium block mb-2">
-                              {question.text || `Question ${index + 1}`}
-                            </label>
-                            <div className="relative">
-                              <Textarea
-                                id={`question-${index}`}
-                                placeholder="Enter your answer here..."
-                                value={answers[index] || ""}
-                                onChange={(e) => handleAnswerChange(index, e.target.value)}
-                                className="min-h-[100px] resize-none"
-                              />
+                  {examData?.questions.map((group, groupIndex) => {
+                    let questionOffset = 0;
+                    for (let i = 0; i < groupIndex; i++) {
+                      questionOffset += examData.questions[i].questions.length;
+                    }
+                    return (
+                      <div key={groupIndex} className="p-3 bg-gray-100 rounded-md">
+                        <p className="font-bold text-sm mb-3 whitespace-pre-wrap break-words">{group.instructionText}</p>
+                        {group.questions.map((question, questionIndex) => {
+                          const globalIndex = questionOffset + questionIndex;
+                          return (
+                            <div key={questionIndex} className="space-y-3">
+                              <div className="flex items-start gap-3">
+                                <div className="flex-shrink-0 w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center text-sm font-medium text-purple-600">
+                                  {globalIndex + 1}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <label htmlFor={`question-${globalIndex}`} className="text-sm font-bold block mb-2 whitespace-pre-wrap break-words">
+                                    {question.text || `Question ${globalIndex + 1}`}
+                                  </label>
+                                  <div className="relative">
+                                    <Textarea
+                                      id={`question-${globalIndex}`}
+                                      placeholder="Enter your answer here..."
+                                      value={answers[globalIndex] || ""}
+                                      onChange={(e) => handleAnswerChange(globalIndex, e.target.value)}
+                                      className="min-h-[100px] resize-none"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
+                          )
+                        })}
                       </div>
-                    ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
