@@ -47,6 +47,8 @@ export default function WritingExamPage() {
   const [panelLayout, setPanelLayout] = useState<number[]>([50, 50]);
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const [activeTab, setActiveTab] = useState("task1");
+  const [showOverlay, setShowOverlay] = useState(true);
+  const [countdown, setCountdown] = useState(10);
 
   useEffect(() => {
     const name = localStorage.getItem("examineeName")
@@ -64,6 +66,16 @@ export default function WritingExamPage() {
       loadExamFromDatabase(examId)
     }
   }, [examId, router])
+
+  useEffect(() => {
+    if (countdown > 0) {
+      const countdownTimer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(countdownTimer);
+    } else if (showOverlay) {
+        setShowOverlay(false);
+        startTimer();
+    }
+}, [countdown, showOverlay]);
 
   const loadExamFromDatabase = async (examId: string) => {
     try {
@@ -91,7 +103,6 @@ export default function WritingExamPage() {
           imageUrl: details.imageUrl
       });
       
-      startTimer()
       setLoading(false)
     } catch (error) {
       console.error("❌ Error loading writing exam:", error)
@@ -297,6 +308,12 @@ export default function WritingExamPage() {
 
   return (
     <ProtectedRoute>
+       {showOverlay && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex flex-col justify-center items-center z-50">
+                    <p className="text-white text-2xl mb-4">The exam will begin in:</p>
+                    <p className="text-white font-bold text-9xl">{countdown}</p>
+                </div>
+            )}
       <div className="flex flex-col h-screen bg-gray-50">
         <header className="bg-white shadow-sm border-b sticky top-0 z-10 p-4 space-y-3">
             <div className="flex justify-between items-center">
