@@ -31,7 +31,6 @@ interface ParsedExamData {
 }
 
 export default function WritingExamPage() {
-  const { logout } = useAuth()
   const router = useRouter()
   const params = useParams()
   const { toast } = useToast()
@@ -327,7 +326,6 @@ export default function WritingExamPage() {
                         <Clock className="w-4 h-4" />
                         <span className="font-mono text-sm">{formatTime(timeLeft)}</span>
                     </div>
-                    <Button variant="outline" onClick={logout}>Logout</Button>
                 </div>
             </div>
             <Progress value={progressPercentage} className="h-2" />
@@ -351,10 +349,10 @@ export default function WritingExamPage() {
                         <Card className="flex flex-col overflow-y-auto h-full">
                             <CardHeader><CardTitle>Task 1: Prompt & Image</CardTitle></CardHeader>
                             <CardContent className="flex-1 space-y-4 overflow-y-auto p-4">
-                                {examData.imageUrl && <img src={examData.imageUrl} alt="Task 1 visual aid" className="rounded-lg border mb-4"/>}
                                 <div className="p-4 bg-gray-100 rounded-md border">
                                     <p className="text-sm whitespace-pre-wrap break-words">{examData.task1_prompt}</p>
                                 </div>
+                                {examData.imageUrl && <img src={examData.imageUrl} alt="Task 1 visual aid" className="rounded-lg border mb-4 w-full"/>}
                             </CardContent>
                         </Card>
                     </ResizablePanel>
