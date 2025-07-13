@@ -29,7 +29,6 @@ interface ListeningQuestion {
 }
 
 export default function ListeningExamPage() {
-  const { logout } = useAuth()
   const router = useRouter()
   const params = useParams()
   const { toast } = useToast()
@@ -380,9 +379,6 @@ export default function ListeningExamPage() {
                   <Clock className="w-4 h-4" />
                   <span className="font-mono text-sm">{formatTime(timeLeft)}</span>
                 </div>
-                <Button variant="outline" onClick={logout}>
-                  Logout
-                </Button>
               </div>
             </div>
             <div className="pb-4">
