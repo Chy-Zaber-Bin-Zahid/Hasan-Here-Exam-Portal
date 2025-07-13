@@ -123,6 +123,7 @@ export function EditListeningQuestionModal({ question, open, onOpenChange, onSav
 
     setIsSaving(true);
     let finalAudioUrl = question.audio_url;
+    let oldAudioToDelete = null;
 
     if (audioFile) {
       try {
@@ -138,6 +139,9 @@ export function EditListeningQuestionModal({ question, open, onOpenChange, onSav
         if (!result.success) throw new Error(result.error || 'Upload failed');
 
         finalAudioUrl = result.path;
+        if (question.audio_url) {
+            oldAudioToDelete = question.audio_url.split('/').pop();
+        }
 
         toast({ title: "New Audio Uploaded", description: `File ${result.originalName} saved.` });
 
@@ -155,6 +159,7 @@ export function EditListeningQuestionModal({ question, open, onOpenChange, onSav
       questions: JSON.stringify(validInstructionGroups),
       audio_url: finalAudioUrl,
       updatedAt: new Date().toISOString(),
+      old_audio_to_delete: oldAudioToDelete,
     }
 
     onSave(updatedQuestion)

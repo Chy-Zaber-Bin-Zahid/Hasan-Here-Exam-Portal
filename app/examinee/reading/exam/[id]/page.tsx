@@ -70,12 +70,14 @@ export default function ReadingExamPage() {
     
     const [examData, setExamData] = useState<ReadingExam | null>(null)
     const [answers, setAnswers] = useState<string[]>([]);
+    const answersRef = useRef(answers);
     const [timeLeft, setTimeLeft] = useState(3600);
     const [examineeName, setExamineeName] = useState("")
     const [examineeId, setExamineeId] = useState("")
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+    const isSubmittingRef = useRef(isSubmitting);
+
     const [highlights, setHighlights] = useState<any[][]>([[], [], []]);
     const [activePassageIndex, setActivePassageIndex] = useState(0);
     const [panelLayout, setPanelLayout] = useState<number[]>([50, 50]);
@@ -83,7 +85,17 @@ export default function ReadingExamPage() {
     const timerRef = useRef<NodeJS.Timeout | null>(null)
     const [showOverlay, setShowOverlay] = useState(true);
     const [countdown, setCountdown] = useState(10);
+    const submittedRef = useRef(false);
+
     
+    useEffect(() => {
+        isSubmittingRef.current = isSubmitting;
+    }, [isSubmitting]);
+
+    useEffect(() => {
+        answersRef.current = answers;
+    }, [answers]);
+
     useEffect(() => {
         const name = localStorage.getItem("examineeName");
         const id = localStorage.getItem("examineeId");
@@ -265,7 +277,7 @@ export default function ReadingExamPage() {
                     const questionText = `${questionNumberInPassage}. ${q.text}`;
                     addWrappedText(questionText, { fontSize: 11, fontStyle: 'bold', lineSpacing: 14 });
     
-                    addWrappedText(`   Answer: ${answers[globalQuestionCounter] || "No answer provided"}`, { fontSize: 11, textColor: [0, 0, 150], x: margin + 10 });
+                    addWrappedText(`   Answer: ${answersRef.current[globalQuestionCounter] || "No answer provided"}`, { fontSize: 11, textColor: [0, 0, 150], x: margin + 10 });
                     y += 20;
                     
                     globalQuestionCounter++;
@@ -278,8 +290,9 @@ export default function ReadingExamPage() {
     };
     
     const handleSubmit = async () => {
-        if(isSubmitting) return;
+        if (isSubmittingRef.current || submittedRef.current) return;
         setIsSubmitting(true);
+        submittedRef.current = true;
         try {
             if (timerRef.current) clearInterval(timerRef.current);
             const pdf = await generatePDF();
@@ -296,7 +309,7 @@ export default function ReadingExamPage() {
                         examTitle: examData?.title,
                         examineeName,
                         examineeId,
-                        answers,
+                        answers: answersRef.current,
                         pdfData: pdfDataUrl,
                     }),
                 });
@@ -316,10 +329,12 @@ export default function ReadingExamPage() {
         }
     };
 
-    const handleAutoSubmit = () => {
-        if(isSubmitting) return;
+const handleAutoSubmit = () => {
+    if (!submittedRef.current) {
         handleSubmit();
-    };
+    }
+};
+
 
     if (loading || !examData) return <ProtectedRoute><div className="flex justify-center items-center min-h-screen">Loading Exam...</div></ProtectedRoute>;
     
@@ -348,7 +363,7 @@ export default function ReadingExamPage() {
                             </div>
                         </div>
                     </div>
-                    <Progress value={(3600 - timeLeft) / 36} className="h-2" />
+                    <Progress value={(10 - timeLeft) / 36} className="h-2" />
                 </header>
 
                 <main className="flex-1 min-h-0">

@@ -37,15 +37,26 @@ export default function ListeningExamPage() {
 
   const [examData, setExamData] = useState<ListeningQuestion | null>(null)
   const [answers, setAnswers] = useState<string[]>([])
+  const answersRef = useRef(answers);
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const [totalDuration, setTotalDuration] = useState<number | null>(null);
   const [examStartTime] = useState(Date.now())
   const [examineeName, setExamineeName] = useState("")
   const [examineeId, setExamineeId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const isSubmittingRef = useRef(isSubmitting);
   const [audioPlayed, setAudioPlayed] = useState(false)
   const [loading, setLoading] = useState(true)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const submittedRef = useRef(false);
+
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
+
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
 
   useEffect(() => {
     const name = localStorage.getItem("examineeName")
@@ -242,7 +253,7 @@ export default function ListeningExamPage() {
       addTextWithPageBreaks(`Instruction: ${group.instructionText}`, true);
       group.questions.forEach((question) => {
         const questionText = `Question ${globalQuestionIndex + 1}: ${question.text || ''}`;
-        const answerText = `Answer: ${answers[globalQuestionIndex] || "No answer provided"}`;
+        const answerText = `Answer: ${answersRef.current[globalQuestionIndex] || "No answer provided"}`;
 
         addTextWithPageBreaks(questionText, true);
         addTextWithPageBreaks(answerText);
@@ -256,8 +267,9 @@ export default function ListeningExamPage() {
   }
 
   const handleSubmit = async () => {
-    if (isSubmitting) return
-    setIsSubmitting(true)
+    if (isSubmittingRef.current || submittedRef.current) return;
+    setIsSubmitting(true);
+    submittedRef.current = true;
     try {
       if (timerRef.current) clearInterval(timerRef.current);
       if (audioRef.current) audioRef.current.pause();
@@ -277,7 +289,7 @@ export default function ListeningExamPage() {
             examTitle: examData?.title,
             examineeName: examineeName,
             examineeId: examineeId,
-            answers: answers,
+            answers: answersRef.current,
             pdfData: pdfDataUrl,
             timeSpent: Math.floor((Date.now() - examStartTime) / 1000),
           }),
@@ -298,12 +310,12 @@ export default function ListeningExamPage() {
     }
   }
 
-  const handleAutoSubmit = () => {
-    if (!isSubmitting) {
-      toast({ title: "Time's up!", description: "Your exam will be automatically submitted.", variant: "destructive" });
-      handleSubmit();
-    }
+const handleAutoSubmit = () => {
+  if (!submittedRef.current) {
+    handleSubmit();
   }
+};
+
 
   useEffect(() => {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
@@ -453,7 +465,8 @@ export default function ListeningExamPage() {
                                       placeholder="Enter your answer here..."
                                       value={answers[globalIndex] || ""}
                                       onChange={(e) => handleAnswerChange(globalIndex, e.target.value)}
-                                      className="min-h-[100px] resize-none"
+                                      className="min-h-[100px]"
+                                      spellCheck="false"
                                     />
                                   </div>
                                 </div>

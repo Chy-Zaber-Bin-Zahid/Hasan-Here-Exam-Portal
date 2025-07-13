@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const id = Number.parseInt(params.id)
-    const { title, audio_url, text, questions } = await request.json()
+    const { title, audio_url, text, questions, old_audio_to_delete } = await request.json()
 
     if (!title || !audio_url || !questions) {
       return NextResponse.json({ error: "Title, audio URL, and questions are required" }, { status: 400 })
@@ -36,6 +36,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     if (!success) {
       return NextResponse.json({ error: "Question not found or update failed" }, { status: 404 })
+    }
+    
+    // If the update was successful and there's an old audio file to delete, delete it.
+    if (old_audio_to_delete) {
+        console.log("🗑️ Deleting old audio file:", old_audio_to_delete);
+        deleteAudioFile(old_audio_to_delete);
     }
 
     console.log("✅ Listening question updated successfully")

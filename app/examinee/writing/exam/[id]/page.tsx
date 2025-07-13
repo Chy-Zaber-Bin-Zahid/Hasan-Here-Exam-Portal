@@ -38,16 +38,28 @@ export default function WritingExamPage() {
 
   const [examData, setExamData] = useState<ParsedExamData | null>(null)
   const [answers, setAnswers] = useState({ task1: "", task2: "" });
-  const [timeLeft, setTimeLeft] = useState(3600)
+  const answersRef = useRef(answers);
+  const [timeLeft, setTimeLeft] = useState(3600);
   const [examineeName, setExamineeName] = useState("")
   const [examineeId, setExamineeId] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const isSubmittingRef = useRef(isSubmitting);
   const [loading, setLoading] = useState(true)
   const [panelLayout, setPanelLayout] = useState<number[]>([50, 50]);
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const [activeTab, setActiveTab] = useState("task1");
   const [showOverlay, setShowOverlay] = useState(true);
   const [countdown, setCountdown] = useState(10);
+  const submittedRef = useRef(false); // 🛡️ Prevent double submission
+
+
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
+
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
 
   useEffect(() => {
     const name = localStorage.getItem("examineeName")
@@ -114,6 +126,7 @@ export default function WritingExamPage() {
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
           handleAutoSubmit()
           return 0
         }
@@ -228,7 +241,7 @@ export default function WritingExamPage() {
     addWrappedText({ text: examData?.task1_prompt || "", options: { fontSize: 10 } });
     y += 15;
     addWrappedText({ text: "Examinee's Response:", options: { fontStyle: 'bold' } });
-    addWrappedText({ text: answers.task1 || "[No answer provided]", isAnswer: true });
+    addWrappedText({ text: answersRef.current.task1 || "[No answer provided]", isAnswer: true });
     
     doc.addPage();
     y = margin;
@@ -244,62 +257,69 @@ export default function WritingExamPage() {
     y += 15;
     
     addWrappedText({ text: "Examinee's Response:", options: { fontStyle: 'bold' } });
-    addWrappedText({ text: answers.task2 || "[No answer provided]", isAnswer: true });
+    addWrappedText({ text: answersRef.current.task2 || "[No answer provided]", isAnswer: true });
 
     return doc;
   };
 
-  const handleSubmit = async () => {
-    if (isSubmitting) return
-    setIsSubmitting(true)
-    try {
-      if (timerRef.current) clearInterval(timerRef.current)
+const handleSubmit = async () => {
+  if (submittedRef.current) return;
+  submittedRef.current = true;
+  setIsSubmitting(true);
 
-      const pdf = await generatePDF()
-      const pdfBlob = pdf.output("blob")
-      const reader = new FileReader()
-      reader.onloadend = async () => {
-        const pdfDataUrl = reader.result as string
-        const response = await fetch("/api/submit-exam", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            examType: "writing",
-            examId: examData?.id,
-            examTitle: examData?.title,
-            examineeName,
-            examineeId,
-            answers: answers,
-            pdfData: pdfDataUrl,
-          }),
-        })
-        const result = await response.json()
-        if (result.success) {
-          toast({ title: "Exam submitted successfully!" });
-          router.push("/examinee");
-        } else {
-          throw new Error(result.error || "Submission failed");
-        }
+  try {
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    const pdf = await generatePDF();
+    const pdfBlob = pdf.output("blob");
+    const reader = new FileReader();
+
+    reader.onloadend = async () => {
+      const pdfDataUrl = reader.result as string;
+      const response = await fetch("/api/submit-exam", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          examType: "writing",
+          examId: examData?.id,
+          examTitle: examData?.title,
+          examineeName,
+          examineeId,
+          answers: answersRef.current,
+          pdfData: pdfDataUrl,
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast({ title: "Exam submitted successfully!" });
+        router.push("/examinee");
+      } else {
+        throw new Error(result.error || "Submission failed");
       }
-      reader.readAsDataURL(pdfBlob);
-    } catch (error) {
-      console.error("Error submitting exam:", error)
-      toast({ title: "Submission error", variant: "destructive" });
-      setIsSubmitting(false)
-    }
-  }
+    };
 
-  const handleAutoSubmit = () => {
-    if (isSubmitting) return;
-    toast({ title: "Time's up!", description: "Your exam is being submitted.", variant: "destructive" });
-    handleSubmit();
+    reader.readAsDataURL(pdfBlob);
+  } catch (error) {
+    console.error("Error submitting exam:", error);
+    toast({ title: "Submission error", variant: "destructive" });
+    setIsSubmitting(false);
   }
+};
+
+
+const handleAutoSubmit = () => {
+  if (submittedRef.current) return;
+  if (timerRef.current) clearInterval(timerRef.current);
+  handleSubmit();
+};
+
 
   useEffect(() => {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, []);
   
-  const progressPercentage = ((3600 - timeLeft) / 3600) * 100
+  const progressPercentage = ((10 - timeLeft) / 10) * 100
 
   if (loading || !examData) {
     return <ProtectedRoute><div className="flex justify-center items-center min-h-screen">Loading Exam...</div></ProtectedRoute>
@@ -391,11 +411,11 @@ export default function WritingExamPage() {
                                  <div className="p-4 bg-gray-100 rounded-md border">
                                     <p className="font-semibold mb-2">Prompt:</p>
                                     <p className="text-sm whitespace-pre-wrap break-words">{examData.task2_prompt}</p>
-                                </div>
+                                 </div>
                                  <div className="p-4 bg-blue-50 rounded-md border border-blue-200">
                                     <p className="font-semibold mb-2 text-blue-800">Instructions:</p>
                                     <p className="text-sm whitespace-pre-wrap break-words">{examData.task2_instructions}</p>
-                                </div>
+                                 </div>
                             </CardContent>
                         </Card>
                     </ResizablePanel>
