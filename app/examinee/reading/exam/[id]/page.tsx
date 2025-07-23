@@ -340,6 +340,7 @@ const handleAutoSubmit = () => {
     
     const answeredQuestions = answers.filter(a => a.trim()).length;
     const totalQuestions = answers.length;
+    const progressPercentage = ((3600 - timeLeft) / 3600) * 100;
     
     return (
         <ProtectedRoute>
@@ -363,7 +364,7 @@ const handleAutoSubmit = () => {
                             </div>
                         </div>
                     </div>
-                    <Progress value={(10 - timeLeft) / 36} className="h-2" />
+                    <Progress value={progressPercentage} className="h-2" />
                 </header>
 
                 <main className="flex-1 min-h-0">

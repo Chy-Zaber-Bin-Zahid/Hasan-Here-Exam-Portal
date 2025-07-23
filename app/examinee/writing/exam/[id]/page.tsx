@@ -319,7 +319,7 @@ const handleAutoSubmit = () => {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, []);
   
-  const progressPercentage = ((10 - timeLeft) / 10) * 100
+  const progressPercentage = ((3600 - timeLeft) / 3600) * 100;
 
   if (loading || !examData) {
     return <ProtectedRoute><div className="flex justify-center items-center min-h-screen">Loading Exam...</div></ProtectedRoute>
