@@ -88,17 +88,29 @@
     "appId": "com.hasan.examportal",
     "productName": "Hasan Here Exam Portal",
     "npmRebuild": false,
-  "asar": false,
-  "files": [
-    ".next/**/*",
-    "node_modules/**/*",
-    "public/**/*",
-    "server.js",
-    "main.js",
-    "package.json",
-    "exam_portal.db",
-    "storage/**/*"
-  ],
+    "asarUnpack": [
+      "server.js",
+      "exam_portal.db",
+      "storage/**/*",
+      "node_modules/**/*",
+      ".next/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".next",
+        "to": ".next",
+        "filter": ["**/*"]
+      }
+    ],
+    "files": [
+      "node_modules/**/*",
+      "public/**/*",
+      "server.js",
+      "main.js",
+      "package.json",
+      "exam_portal.db",
+      "storage/**/*"
+    ],
     "win": {
       "icon": "public/icon.ico",
       "target": "nsis"
